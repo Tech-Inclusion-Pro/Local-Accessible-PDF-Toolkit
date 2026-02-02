@@ -83,6 +83,120 @@ class DatabaseQueries:
             return True
         return False
 
+    def set_security_questions(
+        self,
+        user_id: int,
+        question1: str,
+        answer1: str,
+        question2: str,
+        answer2: str,
+        question3: str,
+        answer3: str,
+    ) -> bool:
+        """
+        Set security questions and answers for a user.
+        Answers are stored as hashed, lowercase (case-insensitive).
+        """
+        user = self.get_user(user_id)
+        if user:
+            # Store questions as-is, hash answers lowercase for case-insensitive comparison
+            user.security_question_1 = question1
+            user.security_answer_1 = hash_password(answer1.lower().strip())
+            user.security_question_2 = question2
+            user.security_answer_2 = hash_password(answer2.lower().strip())
+            user.security_question_3 = question3
+            user.security_answer_3 = hash_password(answer3.lower().strip())
+            self.session.commit()
+            logger.info(f"Security questions set for user: {user.username}")
+            return True
+        return False
+
+    def verify_security_answers(
+        self,
+        username: str,
+        answer1: str,
+        answer2: str,
+        answer3: str,
+    ) -> bool:
+        """
+        Verify security question answers (case-insensitive).
+        Returns True if all answers match.
+        """
+        user = self.get_user_by_username(username)
+        if not user:
+            return False
+
+        # Check if security questions are set
+        if not all([
+            user.security_answer_1,
+            user.security_answer_2,
+            user.security_answer_3,
+        ]):
+            logger.warning(f"No security questions set for user: {username}")
+            return False
+
+        # Verify all answers (case-insensitive)
+        answers_match = (
+            verify_password(answer1.lower().strip(), user.security_answer_1) and
+            verify_password(answer2.lower().strip(), user.security_answer_2) and
+            verify_password(answer3.lower().strip(), user.security_answer_3)
+        )
+
+        if answers_match:
+            logger.info(f"Security answers verified for user: {username}")
+        else:
+            logger.warning(f"Security answer verification failed for user: {username}")
+
+        return answers_match
+
+    def get_security_questions(self, username: str) -> tuple:
+        """
+        Get the security questions for a user (not the answers).
+        Returns a tuple of (question1, question2, question3) or (None, None, None) if not set.
+        """
+        user = self.get_user_by_username(username)
+        if user and user.security_question_1:
+            return (
+                user.security_question_1,
+                user.security_question_2,
+                user.security_question_3,
+            )
+        return (None, None, None)
+
+    def reset_password_with_security(
+        self,
+        username: str,
+        answer1: str,
+        answer2: str,
+        answer3: str,
+        new_password: str,
+    ) -> bool:
+        """
+        Reset a user's password after verifying security answers.
+        """
+        if self.verify_security_answers(username, answer1, answer2, answer3):
+            user = self.get_user_by_username(username)
+            if user:
+                user.password_hash = hash_password(new_password)
+                self.session.commit()
+                logger.info(f"Password reset via security questions for user: {username}")
+                return True
+        return False
+
+    def has_security_questions(self, username: str) -> bool:
+        """Check if a user has security questions set up."""
+        user = self.get_user_by_username(username)
+        if user:
+            return all([
+                user.security_question_1,
+                user.security_answer_1,
+                user.security_question_2,
+                user.security_answer_2,
+                user.security_question_3,
+                user.security_answer_3,
+            ])
+        return False
+
     # ==================== Course Operations ====================
 
     def create_course(

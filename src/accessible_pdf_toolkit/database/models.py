@@ -52,6 +52,14 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     last_login: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
+    # Security questions for password recovery (stored as hashed answers, case-insensitive)
+    security_question_1: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    security_answer_1: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    security_question_2: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    security_answer_2: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    security_question_3: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    security_answer_3: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
     # Relationships
     courses: Mapped[List["Course"]] = relationship("Course", back_populates="user", cascade="all, delete-orphan")
     versions: Mapped[List["Version"]] = relationship("Version", back_populates="user")
@@ -271,3 +279,46 @@ def init_db(database_path: Optional[Path] = None) -> None:
     """
     engine = get_engine(database_path)
     Base.metadata.create_all(engine)
+
+    # Run migrations for existing databases
+    _run_migrations(engine)
+
+
+def _run_migrations(engine: Engine) -> None:
+    """
+    Run database migrations to add new columns to existing tables.
+
+    Args:
+        engine: SQLAlchemy Engine instance
+    """
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+
+    # Check if users table exists
+    if 'users' not in inspector.get_table_names():
+        return
+
+    # Get existing columns in users table
+    existing_columns = {col['name'] for col in inspector.get_columns('users')}
+
+    # Security question columns to add
+    security_columns = [
+        ('security_question_1', 'VARCHAR(255)'),
+        ('security_answer_1', 'VARCHAR(255)'),
+        ('security_question_2', 'VARCHAR(255)'),
+        ('security_answer_2', 'VARCHAR(255)'),
+        ('security_question_3', 'VARCHAR(255)'),
+        ('security_answer_3', 'VARCHAR(255)'),
+    ]
+
+    # Add missing columns
+    with engine.connect() as conn:
+        for col_name, col_type in security_columns:
+            if col_name not in existing_columns:
+                try:
+                    conn.execute(text(f'ALTER TABLE users ADD COLUMN {col_name} {col_type}'))
+                    conn.commit()
+                except Exception:
+                    # Column might already exist or other error
+                    pass

@@ -13,6 +13,9 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QProgressDialog,
     QFileDialog,
+    QPushButton,
+    QLabel,
+    QFrame,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread, QTimer
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent
@@ -24,8 +27,12 @@ from ..core.ai_detection import AIDetectionService, DocumentAnalysis, Detection
 from .widgets.navigation_panel import NavigationPanel
 from .widgets.enhanced_pdf_viewer import EnhancedPDFViewer
 from .widgets.ai_suggestions_panel import AISuggestionsPanel
+from .widgets.tutorial_dialog import TutorialDialog
 
 logger = get_logger(__name__)
+
+# Auto-save interval in milliseconds (60 seconds)
+AUTO_SAVE_INTERVAL = 60000
 
 
 class AnalysisWorker(QThread):
@@ -70,6 +77,8 @@ class PDFViewerPanel(QWidget):
         self._detection_service = AIDetectionService()
         self._analysis_worker: Optional[AnalysisWorker] = None
         self._undo_stack: list = []
+        self._has_unsaved_changes = False
+        self._last_save_stack_size = 0
 
         # Enable drag and drop
         self.setAcceptDrops(True)
@@ -78,11 +87,78 @@ class PDFViewerPanel(QWidget):
         self._setup_connections()
         self._setup_accessibility()
         self._apply_styles()
+        self._setup_auto_save()
 
     def _setup_ui(self) -> None:
         """Set up the three-panel layout."""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # Top toolbar (hidden until file is loaded) - compact size
+        self._toolbar = QFrame()
+        self._toolbar.setObjectName("pdfToolbar")
+        self._toolbar.setVisible(False)
+        self._toolbar.setFixedHeight(36)
+        toolbar_layout = QHBoxLayout(self._toolbar)
+        toolbar_layout.setContentsMargins(8, 4, 8, 4)
+        toolbar_layout.setSpacing(8)
+
+        # File info label
+        self._file_info_label = QLabel("No file loaded")
+        self._file_info_label.setStyleSheet(f"color: {COLORS.TEXT_PRIMARY}; font-size: 10pt;")
+        toolbar_layout.addWidget(self._file_info_label)
+
+        toolbar_layout.addStretch()
+
+        # Auto-save status label
+        self._auto_save_label = QLabel("")
+        self._auto_save_label.setStyleSheet(f"color: {COLORS.TEXT_SECONDARY}; font-size: 9pt; font-style: italic;")
+        toolbar_layout.addWidget(self._auto_save_label)
+
+        # Save button
+        self._save_btn = QPushButton("Save")
+        self._save_btn.setToolTip("Save changes (Ctrl+S)")
+        self._save_btn.clicked.connect(self._save_document)
+        self._save_btn.setFixedHeight(26)
+        self._save_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS.SURFACE};
+                color: {COLORS.TEXT_PRIMARY};
+                border: 1px solid {COLORS.BORDER};
+                border-radius: 3px;
+                padding: 2px 12px;
+                font-size: 10pt;
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS.PRIMARY};
+                color: white;
+            }}
+        """)
+        toolbar_layout.addWidget(self._save_btn)
+
+        # Tutorial button
+        self._tutorial_btn = QPushButton("📖 Tutorial")
+        self._tutorial_btn.setToolTip("Learn how to use this application")
+        self._tutorial_btn.clicked.connect(self._show_tutorial)
+        self._tutorial_btn.setFixedHeight(26)
+        self._tutorial_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS.PRIMARY};
+                color: white;
+                border: none;
+                border-radius: 3px;
+                padding: 2px 12px;
+                font-size: 10pt;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS.PRIMARY_DARK};
+            }}
+        """)
+        toolbar_layout.addWidget(self._tutorial_btn)
+
+        layout.addWidget(self._toolbar)
 
         # Main splitter for three panels
         self._splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -156,7 +232,56 @@ class PDFViewerPanel(QWidget):
             QSplitter::handle:hover {{
                 background-color: {COLORS.PRIMARY};
             }}
+            #pdfToolbar {{
+                background-color: {COLORS.SURFACE};
+                border-bottom: 1px solid {COLORS.BORDER};
+            }}
         """)
+
+    def _setup_auto_save(self) -> None:
+        """Set up auto-save timer."""
+        self._auto_save_timer = QTimer(self)
+        self._auto_save_timer.timeout.connect(self._auto_save)
+        # Timer will be started when a file is loaded
+
+    def _auto_save(self) -> None:
+        """Perform auto-save if there are unsaved changes."""
+        if not self._document:
+            return
+
+        # Check if there are new changes since last save
+        if len(self._undo_stack) > self._last_save_stack_size:
+            logger.info("Auto-saving document...")
+            self._auto_save_label.setText("Auto-saving...")
+
+            try:
+                # Save to a temporary tagged version
+                save_path = self._document.path.with_stem(
+                    self._document.path.stem + "_tagged_autosave"
+                )
+
+                if self._handler.save(save_path):
+                    self._last_save_stack_size = len(self._undo_stack)
+                    self._auto_save_label.setText(f"Auto-saved at {self._get_current_time()}")
+                    logger.info(f"Auto-saved to: {save_path}")
+                else:
+                    self._auto_save_label.setText("Auto-save failed")
+                    logger.warning("Auto-save failed")
+            except Exception as e:
+                self._auto_save_label.setText("Auto-save failed")
+                logger.error(f"Auto-save error: {e}")
+        else:
+            self._auto_save_label.setText("No changes to save")
+
+    def _get_current_time(self) -> str:
+        """Get current time as formatted string."""
+        from datetime import datetime
+        return datetime.now().strftime("%H:%M:%S")
+
+    def _show_tutorial(self) -> None:
+        """Show the tutorial dialog."""
+        dialog = TutorialDialog(self)
+        dialog.exec()
 
     def load_file(self, file_path: Path) -> bool:
         """
@@ -169,6 +294,10 @@ class PDFViewerPanel(QWidget):
             True if successful
         """
         logger.info(f"Loading file: {file_path}")
+
+        # Stop auto-save timer if running
+        if self._auto_save_timer.isActive():
+            self._auto_save_timer.stop()
 
         # Close existing document
         if self._document:
@@ -194,6 +323,7 @@ class PDFViewerPanel(QWidget):
         self._viewer.clear_overlays()
         self._suggestions.clear()
         self._undo_stack.clear()
+        self._last_save_stack_size = 0
 
         # Set document properties in suggestions panel
         self._suggestions.set_document_properties(
@@ -202,6 +332,14 @@ class PDFViewerPanel(QWidget):
             author=document.author,
             subject=document.metadata.get("subject"),
         )
+
+        # Show toolbar with file info
+        self._toolbar.setVisible(True)
+        self._file_info_label.setText(f"📄 {file_path.name} ({document.page_count} pages)")
+        self._auto_save_label.setText("Auto-save enabled (every 60s)")
+
+        # Start auto-save timer
+        self._auto_save_timer.start(AUTO_SAVE_INTERVAL)
 
         self.document_loaded.emit(document)
 
@@ -378,6 +516,7 @@ class PDFViewerPanel(QWidget):
     def _save_document(self) -> None:
         """Save the tagged document."""
         if not self._document:
+            QMessageBox.information(self, "No Document", "Please open a PDF file first.")
             return
 
         # Ask for save location
@@ -392,20 +531,29 @@ class PDFViewerPanel(QWidget):
             return
 
         try:
+            self._auto_save_label.setText("Saving...")
+
             if self._handler.save(Path(file_path)):
+                # Update save tracking
+                self._last_save_stack_size = len(self._undo_stack)
+                self._auto_save_label.setText(f"Saved at {self._get_current_time()}")
+
                 QMessageBox.information(
                     self,
                     "Saved",
-                    f"Document saved to:\n{file_path}",
+                    f"Document saved successfully to:\n{file_path}",
                 )
+                logger.info(f"Document saved to: {file_path}")
             else:
                 raise Exception("Save failed")
         except Exception as e:
+            self._auto_save_label.setText("Save failed")
             QMessageBox.critical(
                 self,
                 "Error",
                 f"Failed to save document: {e}",
             )
+            logger.error(f"Save failed: {e}")
 
     def _on_review_mode_changed(self, auto_accept: bool) -> None:
         """Handle review mode change."""
@@ -417,6 +565,10 @@ class PDFViewerPanel(QWidget):
 
     def close_document(self) -> None:
         """Close the current document."""
+        # Stop auto-save timer
+        if self._auto_save_timer.isActive():
+            self._auto_save_timer.stop()
+
         if self._document:
             self._handler.close()
             self._document = None
@@ -425,6 +577,11 @@ class PDFViewerPanel(QWidget):
         self._viewer.clear()
         self._suggestions.clear()
         self._undo_stack.clear()
+        self._last_save_stack_size = 0
+
+        # Hide toolbar
+        self._toolbar.setVisible(False)
+        self._file_info_label.setText("No file loaded")
 
     def refresh_analysis(self) -> None:
         """Re-run the AI analysis."""
@@ -441,7 +598,7 @@ class PDFViewerPanel(QWidget):
     @property
     def has_unsaved_changes(self) -> bool:
         """Check if there are unsaved changes."""
-        return len(self._undo_stack) > 0
+        return len(self._undo_stack) > self._last_save_stack_size
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         """Handle drag enter event for file drops."""

@@ -59,6 +59,7 @@ a = Analysis(
         'accessible_pdf_toolkit.gui.widgets.enhanced_pdf_viewer',
         'accessible_pdf_toolkit.gui.widgets.ai_suggestions_panel',
         'accessible_pdf_toolkit.gui.widgets.ai_config_panel',
+        'accessible_pdf_toolkit.gui.widgets.tutorial_dialog',
         'accessible_pdf_toolkit.gui.dialogs',
         'accessible_pdf_toolkit.gui.dialogs.privacy_warning_dialog',
         'accessible_pdf_toolkit.core.ai_detection',

@@ -8,6 +8,7 @@ from .navigation_panel import NavigationPanel
 from .enhanced_pdf_viewer import EnhancedPDFViewer
 from .ai_suggestions_panel import AISuggestionsPanel
 from .ai_config_panel import AIConfigPanel
+from .tutorial_dialog import TutorialDialog
 
 __all__ = [
     "ComplianceMeter",
@@ -18,4 +19,5 @@ __all__ = [
     "EnhancedPDFViewer",
     "AISuggestionsPanel",
     "AIConfigPanel",
+    "TutorialDialog",
 ]
