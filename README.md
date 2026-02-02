@@ -39,9 +39,9 @@ This app runs on **your computer only**. Your files never leave your machine. Th
 | Feature | What It Does |
 |---------|--------------|
 | **Check PDFs** | Find problems that make PDFs hard to read |
-| **Fix PDFs** | Add tags, image descriptions, and proper headings |
+| **Fix PDFs** | Add image descriptions, proper headings, and accessibility tags |
 | **AI Helper** | Get smart suggestions from AI that runs on YOUR computer |
-| **Make HTML** | Turn PDFs into web pages that are easier to read |
+| **Export HTML** | Turn PDFs into accessible web pages (via File menu) |
 | **Stay Private** | Everything stays on your computer - nothing goes online! |
 
 ---
@@ -149,25 +149,20 @@ When the app opens:
 
 ---
 
-### The 5 Tabs
+### The 3 Tabs
 
-The app has 5 tabs on the left side:
+The app has 3 tabs on the left side:
 
 #### 1. Dashboard
 - See all your recent PDFs
 - Drag files here to open them
 - Click any file to work on it
+- View compliance statistics
 
-#### 2. Tag Editor
-- Add special codes (tags) to your PDF
-- Tags help screen readers understand your document
-
-#### 3. HTML Export
-- Turn your PDF into a web page
-- Web pages can be easier to read
-
-#### 4. PDF Viewer
+#### 2. PDF Viewer
 - See your PDF with colored highlights
+- AI-powered accessibility analysis
+- Apply suggested fixes directly
 - Colors show what needs fixing:
   - 🟣 **Purple** = Headings
   - 🟡 **Yellow** = Images that need descriptions
@@ -175,10 +170,11 @@ The app has 5 tabs on the left side:
   - 🟠 **Orange** = Links
   - 🔴 **Red** = Problems to fix
 
-#### 5. Settings
-- Pick your AI helper
+#### 3. Settings
+- Pick your AI helper (Ollama, LM Studio, etc.)
 - Change how the app looks
-- Set your preferences
+- Configure accessibility checking options
+- Set batch processing preferences
 
 ---
 
@@ -189,12 +185,13 @@ Press these keys to work faster:
 | Press These Keys | What Happens |
 |-----------------|--------------|
 | Ctrl+1 | Go to Dashboard |
-| Ctrl+2 | Go to Tag Editor |
-| Ctrl+3 | Go to HTML Export |
-| Ctrl+4 | Go to PDF Viewer |
-| Ctrl+5 | Go to Settings |
+| Ctrl+2 | Go to PDF Viewer |
+| Ctrl+3 | Go to Settings |
 | Ctrl+O | Open a PDF file |
 | Ctrl+S | Save your work |
+| Ctrl+E | Export to HTML |
+| Ctrl+Shift+V | Validate WCAG compliance |
+| Ctrl+Space | Get AI suggestions |
 
 ---
 
