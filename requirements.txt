@@ -1,0 +1,46 @@
+# Accessible PDF Toolkit Dependencies
+
+# GUI Framework
+PyQt6>=6.4.0
+
+# PDF Processing
+PyMuPDF>=1.23.0
+pikepdf>=8.0.0
+Pillow>=10.0.0
+
+# OCR
+pytesseract>=0.3.10
+
+# Security & Encryption
+cryptography>=41.0.0
+bcrypt>=4.0.0
+
+# Database
+SQLAlchemy>=2.0.0
+
+# HTTP & API
+requests>=2.31.0
+httpx>=0.25.0
+
+# HTML Processing
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# Utilities
+pyyaml>=6.0
+
+# Charts & Visualization
+pyqtgraph>=0.13.0
+
+# Local AI Libraries
+gpt4all>=2.0.0
+
+# Testing
+pytest>=7.0.0
+pytest-qt>=4.2.0
+pytest-cov>=4.0.0
+
+# Development
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.0.0
