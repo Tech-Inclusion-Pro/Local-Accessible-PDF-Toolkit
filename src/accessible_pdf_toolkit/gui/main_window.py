@@ -88,8 +88,6 @@ class MainWindow(QMainWindow):
 
         # Create tab pages
         self.dashboard_tab = DashboardPanel()
-        self.tag_editor_tab = QWidget()
-        self.html_converter_tab = QWidget()
         self.pdf_viewer_tab = PDFViewerPanel()
         self.settings_tab = SettingsPanel()
 
@@ -102,10 +100,8 @@ class MainWindow(QMainWindow):
             lambda path: self.dashboard_tab.add_recent_file(path)
         )
 
-        # Add tabs
+        # Add tabs (3 tabs: Dashboard, PDF Viewer, Settings)
         self.tab_widget.addTab(self.dashboard_tab, "Dashboard")
-        self.tab_widget.addTab(self.tag_editor_tab, "Tag Editor")
-        self.tab_widget.addTab(self.html_converter_tab, "HTML Export")
         self.tab_widget.addTab(self.pdf_viewer_tab, "PDF Viewer")
         self.tab_widget.addTab(self.settings_tab, "Settings")
 
@@ -180,24 +176,14 @@ class MainWindow(QMainWindow):
         dashboard_action.triggered.connect(lambda: self.tab_widget.setCurrentIndex(0))
         view_menu.addAction(dashboard_action)
 
-        editor_action = QAction("Tag &Editor", self)
-        editor_action.setShortcut(QKeySequence("Ctrl+2"))
-        editor_action.triggered.connect(lambda: self.tab_widget.setCurrentIndex(1))
-        view_menu.addAction(editor_action)
-
-        html_action = QAction("&HTML Export", self)
-        html_action.setShortcut(QKeySequence("Ctrl+3"))
-        html_action.triggered.connect(lambda: self.tab_widget.setCurrentIndex(2))
-        view_menu.addAction(html_action)
-
         viewer_action = QAction("PDF &Viewer", self)
-        viewer_action.setShortcut(QKeySequence("Ctrl+4"))
-        viewer_action.triggered.connect(lambda: self.tab_widget.setCurrentIndex(3))
+        viewer_action.setShortcut(QKeySequence("Ctrl+2"))
+        viewer_action.triggered.connect(lambda: self.tab_widget.setCurrentIndex(1))
         view_menu.addAction(viewer_action)
 
         settings_action = QAction("&Settings", self)
-        settings_action.setShortcut(QKeySequence("Ctrl+5"))
-        settings_action.triggered.connect(lambda: self.tab_widget.setCurrentIndex(4))
+        settings_action.setShortcut(QKeySequence("Ctrl+3"))
+        settings_action.triggered.connect(lambda: self.tab_widget.setCurrentIndex(2))
         view_menu.addAction(settings_action)
 
         view_menu.addSeparator()
@@ -303,8 +289,8 @@ class MainWindow(QMainWindow):
 
     def _setup_shortcuts(self) -> None:
         """Set up keyboard shortcuts."""
-        # Tab navigation (now 5 tabs)
-        for i in range(5):
+        # Tab navigation (3 tabs: Dashboard, PDF Viewer, Settings)
+        for i in range(3):
             shortcut_key = f"Ctrl+{i + 1}"
             action = QAction(self)
             action.setShortcut(QKeySequence(shortcut_key))
@@ -315,19 +301,11 @@ class MainWindow(QMainWindow):
         """Configure accessibility features."""
         # Set accessible names for main components
         self.tab_widget.setAccessibleName("Main navigation tabs")
-        self.tab_widget.setAccessibleDescription("Use Ctrl+1 through Ctrl+5 to switch tabs")
+        self.tab_widget.setAccessibleDescription("Use Ctrl+1 through Ctrl+3 to switch tabs")
 
         # Dashboard tab
         self.dashboard_tab.setAccessibleName("Dashboard")
         self.dashboard_tab.setAccessibleDescription("View files, courses, and compliance statistics")
-
-        # Tag editor tab
-        self.tag_editor_tab.setAccessibleName("Tag Editor")
-        self.tag_editor_tab.setAccessibleDescription("Edit PDF accessibility tags and structure")
-
-        # HTML converter tab
-        self.html_converter_tab.setAccessibleName("HTML Export")
-        self.html_converter_tab.setAccessibleDescription("Convert PDFs to accessible HTML")
 
         # PDF Viewer tab
         self.pdf_viewer_tab.setAccessibleName("PDF Viewer")
@@ -667,7 +645,7 @@ class MainWindow(QMainWindow):
 
         # Optionally open in PDF Viewer
         if open_in_viewer:
-            self.tab_widget.setCurrentIndex(3)
+            self.tab_widget.setCurrentIndex(1)  # PDF Viewer is now tab index 1
             self.pdf_viewer_tab.load_file(file_path)
 
         logger.info(f"Opened file: {file_path}")
@@ -713,9 +691,13 @@ class MainWindow(QMainWindow):
         )
 
         if file_path:
-            # Switch to HTML converter tab
-            self.tab_widget.setCurrentIndex(2)
-            self.status_bar.showMessage(f"Export target: {file_path}", 3000)
+            self.status_bar.showMessage(f"Exporting to: {file_path}", 3000)
+            # TODO: Implement HTML export functionality
+            QMessageBox.information(
+                self,
+                "Export",
+                f"HTML export will be saved to:\n{file_path}"
+            )
 
     # ==================== Tool Actions ====================
 
@@ -785,7 +767,7 @@ class MainWindow(QMainWindow):
 
     def show_settings(self) -> None:
         """Switch to settings tab."""
-        self.tab_widget.setCurrentIndex(4)
+        self.tab_widget.setCurrentIndex(2)  # Settings is now tab index 2
 
     def open_in_pdf_viewer(self) -> None:
         """Open a PDF in the PDF Viewer tab."""
@@ -808,7 +790,7 @@ class MainWindow(QMainWindow):
             return
 
         # Switch to PDF Viewer tab
-        self.tab_widget.setCurrentIndex(3)
+        self.tab_widget.setCurrentIndex(1)  # PDF Viewer is now tab index 1
         # Load the file
         self.pdf_viewer_tab.load_file(path)
         self.current_file = path
@@ -842,19 +824,15 @@ class MainWindow(QMainWindow):
 <b>File Operations</b>
 <table>
 <tr><td>Ctrl+O</td><td>Open PDF</td></tr>
-<tr><td>Ctrl+Shift+O</td><td>Open in PDF Viewer</td></tr>
 <tr><td>Ctrl+S</td><td>Save</td></tr>
 <tr><td>Ctrl+Shift+S</td><td>Save As</td></tr>
-<tr><td>Ctrl+E</td><td>Export to HTML</td></tr>
 </table>
 
 <b>Navigation</b>
 <table>
 <tr><td>Ctrl+1</td><td>Dashboard</td></tr>
-<tr><td>Ctrl+2</td><td>Tag Editor</td></tr>
-<tr><td>Ctrl+3</td><td>HTML Export</td></tr>
-<tr><td>Ctrl+4</td><td>PDF Viewer</td></tr>
-<tr><td>Ctrl+5</td><td>Settings</td></tr>
+<tr><td>Ctrl+2</td><td>PDF Viewer</td></tr>
+<tr><td>Ctrl+3</td><td>Settings</td></tr>
 <tr><td>Tab</td><td>Next element</td></tr>
 <tr><td>Shift+Tab</td><td>Previous element</td></tr>
 </table>

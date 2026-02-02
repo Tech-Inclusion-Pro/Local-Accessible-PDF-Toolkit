@@ -639,3 +639,85 @@ class AISuggestionsPanel(QWidget):
     def auto_accept_mode(self) -> bool:
         """Check if auto-accept mode is enabled."""
         return self._auto_accept_mode
+
+    def scroll_to_detection(self, detection_id: str) -> None:
+        """
+        Scroll to and highlight a specific detection by ID.
+
+        Args:
+            detection_id: The ID of the detection to scroll to
+        """
+        for item in self._suggestion_items:
+            if item.detection.get("id") == detection_id:
+                # Highlight this item
+                item.setStyleSheet(f"""
+                    SuggestionItem {{
+                        background-color: {COLORS.PRIMARY}30;
+                        border: 2px solid {COLORS.PRIMARY};
+                        border-radius: 4px;
+                        border-left: 4px solid {COLORS.PRIMARY};
+                    }}
+                    QLabel {{
+                        color: {COLORS.TEXT_PRIMARY};
+                        font-size: 11pt;
+                    }}
+                    QLineEdit {{
+                        background-color: {COLORS.INPUT_BG};
+                        color: {COLORS.INPUT_TEXT};
+                        border: 1px solid {COLORS.INPUT_BORDER};
+                        border-radius: 4px;
+                        padding: 4px;
+                        font-size: 11pt;
+                    }}
+                    QPushButton {{
+                        background-color: {COLORS.SURFACE};
+                        color: {COLORS.TEXT_PRIMARY};
+                        border: 1px solid {COLORS.BORDER};
+                        border-radius: 4px;
+                        padding: 4px 12px;
+                        font-size: 10pt;
+                    }}
+                    QPushButton:hover {{
+                        background-color: {COLORS.PRIMARY};
+                        color: white;
+                    }}
+                    QCheckBox {{
+                        color: {COLORS.TEXT_PRIMARY};
+                    }}
+                """)
+
+                # Expand the parent section
+                detection_type = item.detection.get("type", "")
+                if detection_type == "heading":
+                    self._headings_section.set_expanded(True)
+                elif detection_type == "image":
+                    self._images_section.set_expanded(True)
+                elif detection_type == "table":
+                    self._tables_section.set_expanded(True)
+                elif detection_type == "link":
+                    self._links_section.set_expanded(True)
+                elif detection_type == "reading_order":
+                    self._order_section.set_expanded(True)
+
+                # Scroll to make visible
+                item.setFocus()
+
+                # Reset highlight after 3 seconds
+                from PyQt6.QtCore import QTimer
+                QTimer.singleShot(3000, lambda i=item: i._apply_styles())
+
+                break
+            else:
+                # Reset other items to normal style
+                item._apply_styles()
+
+    def highlight_detection(self, detection_data: dict) -> None:
+        """
+        Highlight a detection based on overlay click data from the viewer.
+
+        Args:
+            detection_data: Dictionary containing detection information
+        """
+        detection_id = detection_data.get("id", "")
+        if detection_id:
+            self.scroll_to_detection(detection_id)

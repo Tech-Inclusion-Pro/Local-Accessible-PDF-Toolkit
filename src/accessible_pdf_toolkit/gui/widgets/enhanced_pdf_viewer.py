@@ -489,6 +489,36 @@ class EnhancedPDFViewer(QWidget):
         """
         self._page_widget.set_selected_overlay(overlay_id)
 
+    def update_overlay_status(self, overlay_id: str, status: str) -> None:
+        """
+        Update the status/color of an overlay.
+
+        Args:
+            overlay_id: ID of the overlay to update
+            status: New status ('applied', 'skipped', etc.)
+        """
+        # Define colors for different statuses
+        status_colors = {
+            "applied": (34, 197, 94, 150),    # Green - success
+            "skipped": (156, 163, 175, 100),  # Gray - skipped
+            "error": (239, 68, 68, 150),      # Red - error
+        }
+
+        new_color = status_colors.get(status)
+        if not new_color:
+            return
+
+        # Update the overlay color in all pages
+        for page_overlays in self._overlays_by_page.values():
+            for overlay in page_overlays:
+                if overlay.id == overlay_id:
+                    overlay.color = new_color
+                    break
+
+        # Refresh current page if overlay is on it
+        if self._current_page in self._overlays_by_page:
+            self._page_widget.set_overlays(self._overlays_by_page[self._current_page])
+
     def _on_overlay_clicked(self, overlay: OverlayItem) -> None:
         """Handle overlay click."""
         self.overlay_clicked.emit(overlay.data)

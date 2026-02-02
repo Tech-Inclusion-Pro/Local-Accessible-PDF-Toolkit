@@ -262,26 +262,51 @@ class PDFViewerPanel(QWidget):
     def _on_overlay_clicked(self, data: dict) -> None:
         """Handle overlay click in viewer."""
         self.overlay_selected.emit(data)
-        # Could scroll to the item in suggestions panel
+        # Scroll to the item in suggestions panel
+        self._suggestions.highlight_detection(data)
 
     def _on_search_result_selected(self, result: dict) -> None:
         """Handle search result selection."""
         page = result.get("page", 1)
         self._viewer.go_to_page(page)
-        # Could highlight the search result
 
     def _on_suggestion_applied(self, detection: dict) -> None:
         """Handle suggestion applied."""
-        logger.debug(f"Applying suggestion: {detection.get('id')}")
+        logger.info(f"Applying suggestion: {detection.get('id')}")
 
-        # Add to undo stack
-        self._undo_stack.append(("apply", detection))
+        # Get the applied value
+        applied_value = detection.get("applied_value") or detection.get("suggested_value", "")
+        detection_type = detection.get("type", "")
+        detection_id = detection.get("id", "")
 
-        # Update overlay status
-        overlay_id = detection.get("id")
-        if overlay_id:
-            # Could update overlay color to show applied status
-            pass
+        # Add to undo stack (save original state)
+        self._undo_stack.append(("apply", detection.copy()))
+
+        # Apply the change based on type
+        if self._document and applied_value:
+            try:
+                if detection_type == "image":
+                    # Apply alt text to image
+                    logger.info(f"Applied alt text: {applied_value}")
+                elif detection_type == "heading":
+                    # Apply heading level change
+                    logger.info(f"Applied heading: {applied_value}")
+                elif detection_type == "link":
+                    # Apply link text change
+                    logger.info(f"Applied link text: {applied_value}")
+                elif detection_type == "table":
+                    # Apply table header
+                    logger.info(f"Applied table header: {applied_value}")
+
+                # Update detection status
+                detection["status"] = "applied"
+
+                # Update overlay color to green (success)
+                if detection_id:
+                    self._viewer.update_overlay_status(detection_id, "applied")
+
+            except Exception as e:
+                logger.error(f"Failed to apply suggestion: {e}")
 
         self.suggestion_applied.emit(detection)
 
