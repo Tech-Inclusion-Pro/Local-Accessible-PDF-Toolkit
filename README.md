@@ -260,9 +260,9 @@ Want an app you can double-click to open? Do this:
 
 ---
 
-## Privacy Promise
+## Privacy Premise
 
-Your files are **100% private**:
+*If you use a local model on your computer (like Ollama), your files are **100% private**:
 
 - PDFs **never** leave your computer
 - AI runs **locally** on your machine
