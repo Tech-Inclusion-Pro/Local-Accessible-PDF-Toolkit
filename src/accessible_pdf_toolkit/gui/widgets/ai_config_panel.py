@@ -181,9 +181,9 @@ class AIConfigPanel(QWidget):
         local_layout.addWidget(self._local_radio)
 
         local_desc = QLabel(
-            "\u2705 Data stays on your computer\n"
-            "\u2705 No internet required\n"
-            "\u2705 Full compliance with privacy regulations"
+            "\u2713 Data stays on your computer\n"
+            "\u2713 No internet required\n"
+            "\u2713 Full compliance with privacy regulations"
         )
         local_desc.setStyleSheet(f"color: {COLORS.SUCCESS}; font-size: 10pt; margin-left: 24px;")
         local_layout.addWidget(local_desc)
@@ -196,15 +196,15 @@ class AIConfigPanel(QWidget):
         cloud_layout = QVBoxLayout(cloud_frame)
         cloud_layout.setContentsMargins(12, 12, 12, 12)
 
-        self._cloud_radio = QRadioButton("CLOUD APIs (\u26A0\uFE0F NOT FERPA/HIPAA Compliant)")
+        self._cloud_radio = QRadioButton("CLOUD APIs (\u25B3 NOT FERPA/HIPAA Compliant)")
         self._cloud_radio.toggled.connect(self._on_mode_changed)
         self._mode_group.addButton(self._cloud_radio)
         cloud_layout.addWidget(self._cloud_radio)
 
         cloud_desc = QLabel(
-            "\u274C Data sent to external servers\n"
-            "\u274C Not suitable for sensitive documents\n"
-            "\u274C Requires API keys and internet"
+            "\u2717 Data sent to external servers\n"
+            "\u2717 Not suitable for sensitive documents\n"
+            "\u2717 Requires API keys and internet"
         )
         cloud_desc.setStyleSheet(f"color: {COLORS.ERROR}; font-size: 10pt; margin-left: 24px;")
         cloud_layout.addWidget(cloud_desc)
@@ -692,12 +692,12 @@ class AIConfigPanel(QWidget):
                     # GPT4All doesn't have a server
                     try:
                         import gpt4all
-                        self._status_label.setText("\u2705 GPT4All available")
+                        self._status_label.setText("\u2713 GPT4All available")
                         self._status_label.setStyleSheet(f"color: {COLORS.SUCCESS};")
                         self.connection_tested.emit(True, "GPT4All available")
                         return
                     except ImportError:
-                        self._status_label.setText("\u274C GPT4All not installed")
+                        self._status_label.setText("\u2717 GPT4All not installed")
                         self._status_label.setStyleSheet(f"color: {COLORS.ERROR};")
                         self.connection_tested.emit(False, "GPT4All not installed")
                         return
@@ -706,11 +706,11 @@ class AIConfigPanel(QWidget):
                 response = httpx.get(base_url, timeout=10)
 
                 if response.status_code == 200:
-                    self._status_label.setText(f"\u2705 Connected to {base_url}")
+                    self._status_label.setText(f"\u2713 Connected to {base_url}")
                     self._status_label.setStyleSheet(f"color: {COLORS.SUCCESS};")
                     self.connection_tested.emit(True, f"Connected to {base_url}")
                 else:
-                    self._status_label.setText(f"\u26A0\uFE0F Status: {response.status_code}")
+                    self._status_label.setText(f"\u25B3 Status: {response.status_code}")
                     self._status_label.setStyleSheet(f"color: {COLORS.WARNING};")
                     self.connection_tested.emit(False, f"Status: {response.status_code}")
 
@@ -718,24 +718,24 @@ class AIConfigPanel(QWidget):
                 # Cloud providers - just check if API key is set
                 api_key = self._key_edit.text().strip()
                 if not api_key:
-                    self._status_label.setText("\u274C No API key provided")
+                    self._status_label.setText("\u2717 No API key provided")
                     self._status_label.setStyleSheet(f"color: {COLORS.ERROR};")
                     self.connection_tested.emit(False, "No API key")
                     return
 
                 # Could do a minimal API call to verify, but for now just check format
                 if len(api_key) > 10:
-                    self._status_label.setText("\u2705 API key configured")
+                    self._status_label.setText("\u2713 API key configured")
                     self._status_label.setStyleSheet(f"color: {COLORS.SUCCESS};")
                     self.connection_tested.emit(True, "API key configured")
                 else:
-                    self._status_label.setText("\u26A0\uFE0F API key looks invalid")
+                    self._status_label.setText("\u25B3 API key looks invalid")
                     self._status_label.setStyleSheet(f"color: {COLORS.WARNING};")
                     self.connection_tested.emit(False, "Invalid API key format")
 
         except Exception as e:
             logger.error(f"Connection test failed: {e}")
-            self._status_label.setText(f"\u274C Error: {str(e)[:50]}")
+            self._status_label.setText(f"\u2717 Error: {str(e)[:50]}")
             self._status_label.setStyleSheet(f"color: {COLORS.ERROR};")
             self.connection_tested.emit(False, str(e))
 

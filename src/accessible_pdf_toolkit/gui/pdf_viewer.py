@@ -20,9 +20,10 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal, QThread, QTimer
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent
 
-from ..utils.constants import COLORS
+from ..utils.constants import COLORS, WCAGLevel
 from ..utils.logger import get_logger
 from ..core.pdf_handler import PDFHandler, PDFDocument
+from ..core.wcag_validator import WCAGValidator, ValidationResult
 from ..core.ai_detection import AIDetectionService, DocumentAnalysis, Detection
 from .widgets.navigation_panel import NavigationPanel
 from .widgets.enhanced_pdf_viewer import EnhancedPDFViewer
@@ -59,6 +60,34 @@ class AnalysisWorker(QThread):
             self.error.emit(str(e))
 
 
+class ValidationWorker(QThread):
+    """Background worker for WCAG validation."""
+
+    finished = pyqtSignal(object)  # ValidationResult
+    error = pyqtSignal(str)
+    progress = pyqtSignal(int, str)
+
+    def __init__(self, document: PDFDocument, target_level: WCAGLevel = WCAGLevel.AA):
+        super().__init__()
+        self._document = document
+        self._target_level = target_level
+
+    def run(self):
+        """Run the validation."""
+        try:
+            self.progress.emit(10, "Starting WCAG validation...")
+            validator = WCAGValidator(target_level=self._target_level)
+
+            self.progress.emit(50, "Checking accessibility criteria...")
+            result = validator.validate(self._document)
+
+            self.progress.emit(100, "Validation complete")
+            self.finished.emit(result)
+        except Exception as e:
+            logger.error(f"Validation failed: {e}")
+            self.error.emit(str(e))
+
+
 class PDFViewerPanel(QWidget):
     """Main PDF viewer panel with three-panel layout."""
 
@@ -67,6 +96,7 @@ class PDFViewerPanel(QWidget):
     overlay_selected = pyqtSignal(dict)
     suggestion_applied = pyqtSignal(dict)
     file_dropped = pyqtSignal(str)  # Emitted when a file is dropped
+    validation_complete = pyqtSignal(object)  # ValidationResult
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -76,6 +106,8 @@ class PDFViewerPanel(QWidget):
         self._analysis: Optional[DocumentAnalysis] = None
         self._detection_service = AIDetectionService()
         self._analysis_worker: Optional[AnalysisWorker] = None
+        self._validation_worker: Optional[ValidationWorker] = None
+        self._last_validation_result: Optional[ValidationResult] = None
         self._undo_stack: list = []
         self._has_unsaved_changes = False
         self._last_save_stack_size = 0
@@ -138,7 +170,7 @@ class PDFViewerPanel(QWidget):
         toolbar_layout.addWidget(self._save_btn)
 
         # Tutorial button
-        self._tutorial_btn = QPushButton("📖 Tutorial")
+        self._tutorial_btn = QPushButton("\u2630 Tutorial")
         self._tutorial_btn.setToolTip("Learn how to use this application")
         self._tutorial_btn.clicked.connect(self._show_tutorial)
         self._tutorial_btn.setFixedHeight(26)
@@ -335,7 +367,7 @@ class PDFViewerPanel(QWidget):
 
         # Show toolbar with file info
         self._toolbar.setVisible(True)
-        self._file_info_label.setText(f"📄 {file_path.name} ({document.page_count} pages)")
+        self._file_info_label.setText(f"\u25A1 {file_path.name} ({document.page_count} pages)")
         self._auto_save_label.setText("Auto-save enabled (every 60s)")
 
         # Start auto-save timer
@@ -562,6 +594,60 @@ class PDFViewerPanel(QWidget):
             logger.info("Auto-accept mode enabled")
         else:
             logger.info("Manual review mode enabled")
+
+    def run_validation(self, target_level: WCAGLevel = WCAGLevel.AA) -> Optional[ValidationResult]:
+        """
+        Run WCAG validation on the current document synchronously.
+
+        Args:
+            target_level: Target WCAG compliance level
+
+        Returns:
+            ValidationResult or None if no document loaded
+        """
+        if not self._document:
+            return None
+
+        validator = WCAGValidator(target_level=target_level)
+        result = validator.validate(self._document)
+        self._last_validation_result = result
+        self.validation_complete.emit(result)
+        return result
+
+    def run_validation_async(self, target_level: WCAGLevel = WCAGLevel.AA) -> None:
+        """
+        Run WCAG validation asynchronously with a progress dialog.
+
+        Args:
+            target_level: Target WCAG compliance level
+        """
+        if not self._document:
+            return
+
+        progress = QProgressDialog("Validating WCAG compliance...", "Cancel", 0, 100, self)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(200)
+
+        self._validation_worker = ValidationWorker(self._document, target_level)
+        self._validation_worker.progress.connect(
+            lambda val, msg: (progress.setValue(val), progress.setLabelText(msg))
+        )
+        self._validation_worker.finished.connect(self._on_validation_complete)
+        self._validation_worker.finished.connect(progress.close)
+        self._validation_worker.error.connect(
+            lambda err: QMessageBox.warning(self, "Validation Error", f"Validation failed: {err}")
+        )
+        self._validation_worker.error.connect(progress.close)
+        self._validation_worker.start()
+
+    def _on_validation_complete(self, result: ValidationResult) -> None:
+        """Handle completed validation."""
+        self._last_validation_result = result
+        self.validation_complete.emit(result)
+        logger.info(
+            f"Validation complete: score={result.score}, "
+            f"errors={result.summary.get('errors', 0)}"
+        )
 
     def close_document(self) -> None:
         """Close the current document."""

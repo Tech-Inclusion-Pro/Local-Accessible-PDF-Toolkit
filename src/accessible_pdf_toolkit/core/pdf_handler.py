@@ -41,6 +41,7 @@ class PDFPage:
     text: str
     elements: List[PDFElement] = field(default_factory=list)
     images: List[Dict[str, Any]] = field(default_factory=list)
+    links: List[Dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -56,6 +57,7 @@ class PDFDocument:
     is_tagged: bool = False
     has_structure: bool = False
     metadata: Dict[str, Any] = field(default_factory=dict)
+    alt_text_map: Dict[int, List[Dict[str, Any]]] = field(default_factory=dict)
 
     # Internal references
     _fitz_doc: Optional[fitz.Document] = field(default=None, repr=False)
@@ -108,10 +110,14 @@ class PDFHandler:
                 _pike_doc=pike_doc,
             )
 
+            self._current_doc = doc
+
             # Parse pages
             doc.pages = self._parse_pages(fitz_doc)
 
-            self._current_doc = doc
+            # Populate alt text map from structure tree
+            doc.alt_text_map = self.get_image_alt_texts()
+
             logger.info(f"Opened PDF: {file_path.name} ({doc.page_count} pages)")
             return doc
 
@@ -189,6 +195,7 @@ class PDFHandler:
                 text=fitz_page.get_text("text"),
                 elements=self._extract_elements(fitz_page, page_num + 1),
                 images=self._extract_images(fitz_page, page_num + 1),
+                links=self._extract_links(fitz_page, page_num + 1),
             )
             pages.append(page)
 
@@ -207,14 +214,17 @@ class PDFHandler:
                     text = "".join(span["text"] for span in line.get("spans", []))
                     if text.strip():
                         bbox = line["bbox"]
+                        first_span = line["spans"][0] if line["spans"] else {}
                         element = PDFElement(
                             element_type="text",
                             text=text,
                             page_number=page_num,
                             bbox=tuple(bbox),
                             attributes={
-                                "font": line["spans"][0].get("font", "") if line["spans"] else "",
-                                "size": line["spans"][0].get("size", 0) if line["spans"] else 0,
+                                "font": first_span.get("font", ""),
+                                "size": first_span.get("size", 0),
+                                "color": first_span.get("color", 0),
+                                "flags": first_span.get("flags", 0),
                             },
                         )
                         elements.append(element)
@@ -244,6 +254,124 @@ class PDFHandler:
                 logger.warning(f"Failed to extract image {xref}: {e}")
 
         return images
+
+    def _extract_links(self, fitz_page: fitz.Page, page_num: int) -> List[Dict[str, Any]]:
+        """Extract links from a page."""
+        links = []
+        try:
+            for link in fitz_page.get_links():
+                link_info: Dict[str, Any] = {
+                    "page": page_num,
+                    "kind": link.get("kind", 0),
+                    "bbox": (
+                        link["from"].x0, link["from"].y0,
+                        link["from"].x1, link["from"].y1,
+                    ) if "from" in link else (0, 0, 0, 0),
+                }
+                if "uri" in link:
+                    link_info["uri"] = link["uri"]
+                if "page" in link:
+                    link_info["target_page"] = link["page"]
+
+                # Try to extract visible text within the link rect
+                if "from" in link:
+                    rect = link["from"]
+                    text = fitz_page.get_text("text", clip=rect).strip()
+                    link_info["text"] = text
+
+                links.append(link_info)
+        except Exception as e:
+            logger.warning(f"Failed to extract links from page {page_num}: {e}")
+
+        return links
+
+    def get_image_alt_texts(self) -> Dict[int, List[Dict[str, Any]]]:
+        """
+        Walk the PDF structure tree to find Figure elements with alt text.
+
+        Returns:
+            Dict mapping page numbers (1-indexed) to lists of alt text info dicts.
+        """
+        if not self._current_doc or not self._current_doc._pike_doc:
+            return {}
+
+        pike_doc = self._current_doc._pike_doc
+        alt_map: Dict[int, List[Dict[str, Any]]] = {}
+
+        try:
+            if "/StructTreeRoot" not in pike_doc.Root:
+                return {}
+
+            struct_root = pike_doc.Root.StructTreeRoot
+            self._walk_struct_tree(struct_root, pike_doc, alt_map)
+        except Exception as e:
+            logger.warning(f"Failed to walk structure tree for alt texts: {e}")
+
+        return alt_map
+
+    def _walk_struct_tree(
+        self,
+        node: Any,
+        pike_doc: pikepdf.Pdf,
+        alt_map: Dict[int, List[Dict[str, Any]]],
+    ) -> None:
+        """Recursively walk the structure tree looking for Figure elements with /Alt."""
+        try:
+            # Check if this node is a Figure with alt text
+            if hasattr(node, "get") and "/S" in node:
+                tag_name = str(node.S)
+                if tag_name in ("/Figure", "Figure"):
+                    alt_text = None
+                    if "/Alt" in node:
+                        alt_text = str(node.Alt)
+
+                    page_num = self._get_struct_elem_page(node, pike_doc)
+                    if page_num is not None:
+                        if page_num not in alt_map:
+                            alt_map[page_num] = []
+                        alt_map[page_num].append({
+                            "alt_text": alt_text,
+                            "tag": tag_name,
+                        })
+
+            # Recurse into children
+            if hasattr(node, "get") and "/K" in node:
+                children = node.K
+                if isinstance(children, pikepdf.Array):
+                    for child in children:
+                        if isinstance(child, pikepdf.Dictionary):
+                            self._walk_struct_tree(child, pike_doc, alt_map)
+                elif isinstance(children, pikepdf.Dictionary):
+                    self._walk_struct_tree(children, pike_doc, alt_map)
+        except Exception as e:
+            logger.debug(f"Error walking struct tree node: {e}")
+
+    def _get_struct_elem_page(self, elem: Any, pike_doc: pikepdf.Pdf) -> Optional[int]:
+        """Get the 1-indexed page number for a structure element."""
+        try:
+            if "/Pg" in elem:
+                page_obj = elem.Pg
+                for i, page in enumerate(pike_doc.pages):
+                    if page.obj.objgen == page_obj.objgen:
+                        return i + 1
+            # If /K contains an MCR dict with /Pg
+            if "/K" in elem:
+                k = elem.K
+                if isinstance(k, pikepdf.Dictionary) and "/Pg" in k:
+                    page_obj = k.Pg
+                    for i, page in enumerate(pike_doc.pages):
+                        if page.obj.objgen == page_obj.objgen:
+                            return i + 1
+                elif isinstance(k, pikepdf.Array):
+                    for child in k:
+                        if isinstance(child, pikepdf.Dictionary) and "/Pg" in child:
+                            page_obj = child.Pg
+                            for i, page in enumerate(pike_doc.pages):
+                                if page.obj.objgen == page_obj.objgen:
+                                    return i + 1
+        except Exception:
+            pass
+        return 1  # Default to page 1 if we can't determine
 
     def get_image_bytes(self, page_num: int, image_index: int) -> Optional[bytes]:
         """
@@ -386,6 +514,63 @@ class PDFHandler:
         except Exception as e:
             logger.error(f"Failed to add tag: {e}")
             return False
+
+    def ensure_tagged(self) -> bool:
+        """
+        Ensure the PDF has a structure tree and is marked as tagged.
+
+        Returns:
+            True if successful (already tagged or newly created)
+        """
+        if not self._current_doc or not self._current_doc._pike_doc:
+            return False
+
+        try:
+            pike_doc = self._current_doc._pike_doc
+
+            if "/StructTreeRoot" not in pike_doc.Root:
+                pike_doc.Root.StructTreeRoot = pikepdf.Dictionary({
+                    "/Type": pikepdf.Name("/StructTreeRoot"),
+                    "/K": pikepdf.Array([]),
+                })
+
+            if "/MarkInfo" not in pike_doc.Root:
+                pike_doc.Root.MarkInfo = pikepdf.Dictionary({
+                    "/Marked": True,
+                })
+            else:
+                pike_doc.Root.MarkInfo.Marked = True
+
+            self._current_doc.is_tagged = True
+            self._current_doc.has_structure = True
+            return True
+        except Exception as e:
+            logger.error(f"Failed to ensure tagged: {e}")
+            return False
+
+    def set_image_alt_text(
+        self,
+        page_num: int,
+        image_index: int,
+        alt_text: str,
+    ) -> bool:
+        """
+        Set alt text for an image by adding a Figure tag.
+
+        Args:
+            page_num: Page number (1-indexed)
+            image_index: Image index on the page
+            alt_text: Alt text string
+
+        Returns:
+            True if successful
+        """
+        return self.add_tag(
+            page_num=page_num,
+            bbox=(0, 0, 0, 0),  # Bbox not critical for structure element
+            tag_type=TagType.FIGURE,
+            alt_text=alt_text,
+        )
 
     def save(self, output_path: Optional[Path] = None) -> bool:
         """

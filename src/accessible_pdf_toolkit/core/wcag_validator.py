@@ -6,7 +6,14 @@ from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 
-from ..utils.constants import WCAGLevel, WCAG_CRITERIA, CONTRAST_NORMAL_TEXT_AA
+from ..utils.constants import (
+    WCAGLevel,
+    WCAG_CRITERIA,
+    CONTRAST_NORMAL_TEXT_AA,
+    CONTRAST_LARGE_TEXT_AA,
+    CONTRAST_NORMAL_TEXT_AAA,
+    CONTRAST_LARGE_TEXT_AAA,
+)
 from ..utils.logger import get_logger
 from .pdf_handler import PDFDocument, PDFElement
 
@@ -158,34 +165,83 @@ class WCAGValidator:
         """Check reading order (WCAG 1.3.2)."""
         issues = []
 
+        # If the document has no structure tree, reading order can't be guaranteed
+        if not doc.has_structure and doc.page_count > 1:
+            issues.append(ValidationIssue(
+                criterion="1.3.2",
+                severity=IssueSeverity.WARNING,
+                message="No structure tree -- reading order cannot be verified",
+                suggestion="Add a structure tree to define explicit reading order",
+            ))
+
         for page in doc.pages:
             if not page.elements:
                 continue
 
-            # Check for potential reading order issues
-            # Look for elements that might be out of visual order
-            sorted_by_position = sorted(
-                page.elements,
-                key=lambda e: (e.bbox[1], e.bbox[0])  # top-to-bottom, left-to-right
-            )
+            # Check for multi-column layout misreads
+            # Detect if text elements span multiple visual columns
+            text_elems = [e for e in page.elements if e.element_type == "text"]
+            if len(text_elems) < 4:
+                continue
 
-            # Compare with document order
-            # This is a simplified check - real implementation would be more sophisticated
-            position_matches = 0
-            for i, elem in enumerate(page.elements):
-                if i < len(sorted_by_position) and elem == sorted_by_position[i]:
-                    position_matches += 1
+            # Gather x-positions of left edges
+            left_edges = [e.bbox[0] for e in text_elems]
+            if not left_edges:
+                continue
 
-            if len(page.elements) > 0:
-                match_ratio = position_matches / len(page.elements)
-                if match_ratio < 0.8:
-                    issues.append(ValidationIssue(
-                        criterion="1.3.2",
-                        severity=IssueSeverity.WARNING,
-                        message=f"Reading order on page {page.page_number} may not match visual order",
-                        page=page.page_number,
-                        suggestion="Review and adjust the reading order for logical flow",
-                    ))
+            # Detect columns: cluster left-edge x positions
+            sorted_edges = sorted(set(round(x / 20) * 20 for x in left_edges))
+            distinct_columns = len(sorted_edges)
+
+            if distinct_columns >= 2:
+                # Multi-column layout detected -- check if document order follows
+                # visual order (top-to-bottom, column-by-column)
+                sorted_by_position = sorted(
+                    text_elems,
+                    key=lambda e: (round(e.bbox[0] / 50), e.bbox[1])  # group by column, then top-to-bottom
+                )
+
+                # Compare against the content stream order
+                position_matches = 0
+                for i, elem in enumerate(text_elems):
+                    if i < len(sorted_by_position) and elem == sorted_by_position[i]:
+                        position_matches += 1
+
+                if len(text_elems) > 0:
+                    match_ratio = position_matches / len(text_elems)
+                    if match_ratio < 0.7:
+                        issues.append(ValidationIssue(
+                            criterion="1.3.2",
+                            severity=IssueSeverity.WARNING,
+                            message=f"Multi-column layout on page {page.page_number}: "
+                                    f"reading order may not match visual flow "
+                                    f"({distinct_columns} columns detected)",
+                            page=page.page_number,
+                            suggestion="Review reading order to ensure multi-column content "
+                                       "is read in the correct sequence",
+                        ))
+            else:
+                # Single column -- check simple top-to-bottom order
+                sorted_by_position = sorted(
+                    text_elems,
+                    key=lambda e: (e.bbox[1], e.bbox[0])
+                )
+
+                position_matches = sum(
+                    1 for i, elem in enumerate(text_elems)
+                    if i < len(sorted_by_position) and elem == sorted_by_position[i]
+                )
+
+                if len(text_elems) > 0:
+                    match_ratio = position_matches / len(text_elems)
+                    if match_ratio < 0.8:
+                        issues.append(ValidationIssue(
+                            criterion="1.3.2",
+                            severity=IssueSeverity.WARNING,
+                            message=f"Reading order on page {page.page_number} may not match visual order",
+                            page=page.page_number,
+                            suggestion="Review and adjust the reading order for logical flow",
+                        ))
 
         return issues
 
@@ -257,11 +313,20 @@ class WCAGValidator:
         """Check images for alt text (WCAG 1.1.1)."""
         issues = []
 
+        # Build a set of pages that have alt text entries from the structure tree
+        alt_text_map = getattr(doc, "alt_text_map", {})
+
         for page in doc.pages:
-            for img in page.images:
-                # Check if image has alt text
-                # In real implementation, this would check the tag structure
-                image_has_alt = False  # Simplified - check actual tags
+            page_alt_entries = alt_text_map.get(page.page_number, [])
+            # Count how many figures on this page have non-empty alt text
+            figures_with_alt = [
+                entry for entry in page_alt_entries
+                if entry.get("alt_text") and entry["alt_text"].strip()
+            ]
+
+            for img_idx, img in enumerate(page.images):
+                # Image has alt text if there's a matching Figure entry with alt text
+                image_has_alt = img_idx < len(figures_with_alt)
 
                 if not image_has_alt:
                     issues.append(ValidationIssue(
@@ -280,14 +345,10 @@ class WCAGValidator:
         """Check tables for proper structure (WCAG 1.3.1)."""
         issues = []
 
-        # This would require more sophisticated table detection
-        # For now, we'll check if any tagged tables exist
-
         for page in doc.pages:
+            # Check already-tagged tables
             for elem in page.elements:
                 if elem.tag and elem.tag.value == "Table":
-                    # Check for header cells
-                    # Simplified check
                     issues.append(ValidationIssue(
                         criterion="1.3.1",
                         severity=IssueSeverity.INFO,
@@ -295,6 +356,44 @@ class WCAGValidator:
                         page=page.page_number,
                         suggestion="Ensure table headers use TH tags with scope attributes",
                     ))
+
+            # Heuristic: detect untagged tabular data
+            # Group text elements by approximate y-position (rows)
+            if not page.elements:
+                continue
+
+            y_tolerance = 3.0  # points
+            rows: Dict[float, List] = {}
+            for elem in page.elements:
+                if elem.element_type != "text":
+                    continue
+                y = round(elem.bbox[1] / y_tolerance) * y_tolerance
+                rows.setdefault(y, []).append(elem)
+
+            # A table-like pattern: multiple rows each with 3+ columns at similar x positions
+            multi_col_rows = [elems for elems in rows.values() if len(elems) >= 3]
+            if len(multi_col_rows) >= 3:
+                # Check if columns are consistently aligned (same x positions across rows)
+                col_positions = set()
+                for elems in multi_col_rows:
+                    for e in elems:
+                        col_positions.add(round(e.bbox[0] / 10) * 10)  # round to 10pt grid
+
+                if len(col_positions) >= 3:
+                    # Likely a table -- check if it's tagged
+                    has_table_tag = any(
+                        e.tag and e.tag.value == "Table"
+                        for e in page.elements
+                    )
+                    if not has_table_tag:
+                        issues.append(ValidationIssue(
+                            criterion="1.3.1",
+                            severity=IssueSeverity.WARNING,
+                            message=f"Possible untagged table on page {page.page_number} "
+                                    f"({len(multi_col_rows)} rows, ~{len(col_positions)} columns detected)",
+                            page=page.page_number,
+                            suggestion="Tag the table with Table, TR, TH, and TD elements",
+                        ))
 
         return issues
 
@@ -309,8 +408,11 @@ class WCAGValidator:
         ]
 
         for page in doc.pages:
+            # Check already-tagged links
+            tagged_link_count = 0
             for elem in page.elements:
                 if elem.tag and elem.tag.value == "Link":
+                    tagged_link_count += 1
                     text = elem.text.lower().strip()
                     if text in bad_link_texts:
                         issues.append(ValidationIssue(
@@ -323,21 +425,139 @@ class WCAGValidator:
                             auto_fixable=True,
                         ))
 
+            # Check untagged hyperlinks from PDF annotations
+            page_links = getattr(page, "links", [])
+            untagged_link_count = 0
+            for link_info in page_links:
+                # URI links (kind=2) that may not have Link tags
+                uri = link_info.get("uri", "")
+                link_text = link_info.get("text", "").strip()
+
+                if uri:
+                    untagged_link_count += 1
+
+                    # Check for non-descriptive text
+                    if link_text.lower() in bad_link_texts:
+                        issues.append(ValidationIssue(
+                            criterion="2.4.4",
+                            severity=IssueSeverity.ERROR,
+                            message=f"Non-descriptive link text: '{link_text}' (URL: {uri[:60]})",
+                            page=page.page_number,
+                            element=link_text,
+                            suggestion="Use descriptive text that indicates the link's purpose",
+                        ))
+                    elif not link_text:
+                        issues.append(ValidationIssue(
+                            criterion="2.4.4",
+                            severity=IssueSeverity.WARNING,
+                            message=f"Link with no visible text on page {page.page_number} (URL: {uri[:60]})",
+                            page=page.page_number,
+                            suggestion="Ensure the link has visible, descriptive text",
+                        ))
+
+            # Warn if there are URI links but no Link tags at all
+            if untagged_link_count > 0 and tagged_link_count == 0:
+                issues.append(ValidationIssue(
+                    criterion="1.3.1",
+                    severity=IssueSeverity.WARNING,
+                    message=f"{untagged_link_count} hyperlink(s) on page {page.page_number} "
+                            f"are not tagged as Link elements",
+                    page=page.page_number,
+                    suggestion="Tag hyperlinks with Link structure elements for accessibility",
+                ))
+
         return issues
 
+    @staticmethod
+    def _int_to_rgb(color_int: int) -> Tuple[int, int, int]:
+        """Convert a PyMuPDF color integer to (R, G, B) 0-255 tuple."""
+        # PyMuPDF stores color as an integer: 0xRRGGBB
+        r = (color_int >> 16) & 0xFF
+        g = (color_int >> 8) & 0xFF
+        b = color_int & 0xFF
+        return (r, g, b)
+
+    @staticmethod
+    def _relative_luminance(r: int, g: int, b: int) -> float:
+        """Calculate WCAG relative luminance from sRGB values (0-255)."""
+        def linearize(c: int) -> float:
+            cs = c / 255.0
+            return cs / 12.92 if cs <= 0.04045 else ((cs + 0.055) / 1.055) ** 2.4
+
+        return 0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b)
+
+    @staticmethod
+    def _contrast_ratio(lum1: float, lum2: float) -> float:
+        """Calculate contrast ratio between two luminance values."""
+        lighter = max(lum1, lum2)
+        darker = min(lum1, lum2)
+        return (lighter + 0.05) / (darker + 0.05)
+
+    @staticmethod
+    def _is_large_text(size: float, flags: int = 0) -> bool:
+        """Determine if text qualifies as 'large' under WCAG (>=18pt or >=14pt bold)."""
+        is_bold = bool(flags & (1 << 4))  # fitz bold flag
+        if is_bold:
+            return size >= 14.0
+        return size >= 18.0
+
     def _check_color_contrast(self, doc: PDFDocument) -> List[ValidationIssue]:
-        """Check color contrast (WCAG 1.4.3)."""
+        """Check color contrast (WCAG 1.4.3 / 1.4.6)."""
         issues = []
 
-        # This would require actual color analysis of the PDF
-        # For now, we'll add an informational note
+        # Assume white background (default for most PDFs)
+        bg_luminance = self._relative_luminance(255, 255, 255)
 
-        issues.append(ValidationIssue(
-            criterion="1.4.3",
-            severity=IssueSeverity.INFO,
-            message="Color contrast should be verified manually",
-            suggestion=f"Ensure text has at least {CONTRAST_NORMAL_TEXT_AA}:1 contrast ratio",
-        ))
+        check_aaa = self.target_level == WCAGLevel.AAA
+
+        for page in doc.pages:
+            for elem in page.elements:
+                if elem.element_type != "text":
+                    continue
+
+                color_int = elem.attributes.get("color", 0)
+                size = elem.attributes.get("size", 12)
+                flags = elem.attributes.get("flags", 0)
+
+                r, g, b = self._int_to_rgb(color_int)
+                text_luminance = self._relative_luminance(r, g, b)
+                ratio = self._contrast_ratio(text_luminance, bg_luminance)
+                large = self._is_large_text(size, flags)
+
+                # AA thresholds
+                aa_threshold = CONTRAST_LARGE_TEXT_AA if large else CONTRAST_NORMAL_TEXT_AA
+                if ratio < aa_threshold:
+                    issues.append(ValidationIssue(
+                        criterion="1.4.3",
+                        severity=IssueSeverity.ERROR,
+                        message=(
+                            f"Insufficient contrast {ratio:.1f}:1 "
+                            f"(needs {aa_threshold}:1) on page {page.page_number}: "
+                            f"'{elem.text[:40]}...'" if len(elem.text) > 40 else
+                            f"Insufficient contrast {ratio:.1f}:1 "
+                            f"(needs {aa_threshold}:1) on page {page.page_number}: "
+                            f"'{elem.text}'"
+                        ),
+                        page=page.page_number,
+                        element=elem.text[:50],
+                        suggestion=f"Increase text contrast to at least {aa_threshold}:1",
+                    ))
+                elif check_aaa:
+                    # AAA thresholds
+                    aaa_threshold = CONTRAST_LARGE_TEXT_AAA if large else CONTRAST_NORMAL_TEXT_AAA
+                    if ratio < aaa_threshold:
+                        issues.append(ValidationIssue(
+                            criterion="1.4.6",
+                            severity=IssueSeverity.WARNING,
+                            message=(
+                                f"Contrast {ratio:.1f}:1 below AAA threshold "
+                                f"({aaa_threshold}:1) on page {page.page_number}: "
+                                f"'{elem.text[:40]}'"
+                            ),
+                            page=page.page_number,
+                            element=elem.text[:50],
+                            suggestion=f"Increase text contrast to at least {aaa_threshold}:1 for AAA",
+                        ))
 
         return issues
 

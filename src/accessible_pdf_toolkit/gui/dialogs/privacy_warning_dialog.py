@@ -47,7 +47,7 @@ class PrivacyWarningDialog(QDialog):
         # Warning icon and title
         header = QHBoxLayout()
 
-        warning_icon = QLabel("\u26A0\uFE0F")
+        warning_icon = QLabel("\u25B3")
         warning_icon.setFont(QFont("", 32))
         header.addWidget(warning_icon)
 
@@ -80,7 +80,7 @@ class PrivacyWarningDialog(QDialog):
         warning_layout = QVBoxLayout(warning_frame)
 
         not_recommended = QLabel(
-            "<b>\u274C This is NOT recommended for:</b>"
+            "<b>\u2717 This is NOT recommended for:</b>"
         )
         not_recommended.setStyleSheet(f"color: {COLORS.ERROR}; font-size: 12pt;")
         warning_layout.addWidget(not_recommended)
@@ -110,7 +110,7 @@ class PrivacyWarningDialog(QDialog):
         required_layout = QVBoxLayout(required_frame)
 
         required_title = QLabel(
-            "<b>\u2705 REQUIRED BEFORE UPLOAD:</b>"
+            "<b>\u2713 REQUIRED BEFORE UPLOAD:</b>"
         )
         required_title.setStyleSheet(f"color: #92400E; font-size: 12pt;")
         required_layout.addWidget(required_title)
@@ -138,7 +138,7 @@ class PrivacyWarningDialog(QDialog):
         recommend_layout = QVBoxLayout(recommend_frame)
 
         recommend_title = QLabel(
-            "<b>\uD83D\uDCA1 RECOMMENDATION:</b>"
+            "<b>\u2022 RECOMMENDATION:</b>"
         )
         recommend_title.setStyleSheet(f"color: #1E40AF; font-size: 12pt;")
         recommend_layout.addWidget(recommend_title)

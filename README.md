@@ -38,11 +38,38 @@ This app runs on **your computer only**. Your files never leave your machine. Th
 
 | Feature | What It Does |
 |---------|--------------|
-| **Check PDFs** | Find problems that make PDFs hard to read |
-| **Fix PDFs** | Add image descriptions, proper headings, and accessibility tags |
-| **AI Helper** | Get smart suggestions from AI that runs on YOUR computer |
+| **Check PDFs** | Find accessibility problems including contrast, tables, links, and reading order |
+| **Fix PDFs** | Auto-fix titles, language, tags, headings, and image descriptions |
+| **AI Helper** | Get smart suggestions and AI-generated image alt text from AI on YOUR computer |
+| **Batch Process** | Validate and fix multiple PDFs at once via Tools > Batch Process |
 | **Export HTML** | Turn PDFs into accessible web pages (via File menu) |
+| **Undo / Redo** | Undo any tag edit or auto-fix with Ctrl+Z / Ctrl+Shift+Z |
 | **Stay Private** | Everything stays on your computer - nothing goes online! |
+
+---
+
+## What's New (v1.2.0)
+
+### Validation Improvements
+- **Real image alt text checking** - walks the PDF structure tree instead of always reporting missing
+- **Color contrast analysis** - checks every text element against WCAG luminance thresholds (AA and AAA)
+- **Heuristic table detection** - finds untagged tables by detecting grid-like text patterns
+- **Untagged link detection** - finds hyperlinks that exist as annotations but lack Link structure tags
+- **Smarter reading order** - detects multi-column layouts and warns when reading order may be wrong
+
+### New Features
+- **Batch processing** - validate and auto-fix multiple PDFs at once (Tools > Batch Process)
+- **AI-powered alt text** - auto-fix uses your local AI to generate real image descriptions
+- **Undo / Redo** - revert any tag edit or auto-fix action (Ctrl+Z / Ctrl+Shift+Z)
+- **Working HTML export** - File > Export HTML now generates accessible HTML with TOC and ARIA landmarks
+- **Toolbar wiring** - Validate and AI Suggest toolbar buttons now work end-to-end
+- **Inline results panel** - validation issues appear as a clickable list with "Fix" and "Page N" buttons
+
+### Bug Fixes & Polish
+- **Async validation** - UI no longer freezes during validation or AI calls
+- **Clean exit** - close confirmation only appears when there are unsaved changes
+- **Animation stability** - circular progress animation no longer gets garbage collected
+- **Consistent icons** - all emoji icons replaced with clean white Unicode line symbols
 
 ---
 
@@ -189,6 +216,8 @@ Press these keys to work faster:
 | Ctrl+3 | Go to Settings |
 | Ctrl+O | Open a PDF file |
 | Ctrl+S | Save your work |
+| Ctrl+Z | Undo last change |
+| Ctrl+Shift+Z | Redo last change |
 | Ctrl+E | Export to HTML |
 | Ctrl+Shift+V | Validate WCAG compliance |
 | Ctrl+Space | Get AI suggestions |
@@ -283,16 +312,31 @@ Want an app you can double-click to open? Do this:
 
 ### WCAG Compliance
 
-This app checks your PDFs against WCAG 2.1/2.2 Level AA:
+This app checks your PDFs against WCAG 2.1/2.2 Level A, AA, and AAA:
 
 | What We Check | Why It Matters |
 |---------------|----------------|
 | Document title | Screen readers announce it |
+| Document language | Ensures correct pronunciation |
+| Tagged PDF structure | Enables assistive technology to parse the document |
 | Headings | Helps people navigate |
-| Image descriptions | Describes pictures for blind users |
-| Table headers | Makes data tables understandable |
-| Link text | "Click here" doesn't help - we fix that! |
-| Reading order | Content should flow logically |
+| Image descriptions | Describes pictures for blind users (uses structure tree) |
+| Color contrast | Text must be readable (4.5:1 for AA, 7:1 for AAA) |
+| Table detection | Finds untagged tables using layout heuristics |
+| Link text | "Click here" doesn't help - detects untagged hyperlinks too |
+| Reading order | Detects multi-column layouts and order mismatches |
+
+### Auto-Fix Capabilities
+
+The auto-fix feature can resolve these issues automatically:
+
+| What It Fixes | How |
+|---------------|-----|
+| Missing title | Sets a human-readable title from the filename |
+| Missing language | Sets document language to English |
+| No tags / structure | Creates a structure tree and marks the PDF as tagged |
+| Untagged headings | Detects headings by font size and assigns H1-H6 tags |
+| Missing image alt text | Uses AI-generated descriptions when available, placeholder otherwise |
 
 ---
 

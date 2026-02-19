@@ -34,9 +34,12 @@ from ..utils.constants import (
 )
 from ..utils.logger import get_logger
 from ..database.models import User, init_db
+from ..core.pdf_handler import PDFHandler
+from ..core.html_generator import HTMLGenerator, HTMLOptions
 from .pdf_viewer import PDFViewerPanel
 from .settings import SettingsPanel
 from .dashboard_panel import DashboardPanel
+from .dialogs.batch_dialog import BatchDialog
 
 logger = get_logger(__name__)
 
@@ -677,7 +680,7 @@ class MainWindow(QMainWindow):
         return False
 
     def export_html(self) -> None:
-        """Export to HTML."""
+        """Export to accessible HTML."""
         if not self.current_file:
             QMessageBox.information(self, "No File", "Please open a PDF file first")
             return
@@ -690,14 +693,50 @@ class MainWindow(QMainWindow):
             file_filter,
         )
 
-        if file_path:
-            self.status_bar.showMessage(f"Exporting to: {file_path}", 3000)
-            # TODO: Implement HTML export functionality
-            QMessageBox.information(
-                self,
-                "Export",
-                f"HTML export will be saved to:\n{file_path}"
+        if not file_path:
+            return
+
+        handler = PDFHandler()
+        try:
+            self.status_bar.showMessage("Exporting to HTML...", 0)
+
+            document = handler.open(self.current_file)
+            if not document:
+                QMessageBox.warning(self, "Error", "Failed to open PDF for export")
+                return
+
+            options = HTMLOptions(
+                theme="brand",
+                include_styles=True,
+                include_toc=True,
+                responsive=True,
+                include_images=True,
+                add_aria=True,
+                language=document.language or "en",
             )
+            generator = HTMLGenerator(options)
+            result = generator.generate(document)
+
+            output_path = Path(file_path)
+            if generator.save(result, output_path):
+                self.status_bar.showMessage(f"Exported: {output_path.name}", 5000)
+                QMessageBox.information(
+                    self,
+                    "Export Complete",
+                    f"HTML exported successfully to:\n{file_path}",
+                )
+            else:
+                QMessageBox.warning(self, "Error", "Failed to save HTML file")
+
+        except Exception as e:
+            logger.error(f"HTML export failed: {e}")
+            QMessageBox.critical(
+                self,
+                "Export Error",
+                f"Failed to export HTML:\n{e}",
+            )
+        finally:
+            handler.close()
 
     # ==================== Tool Actions ====================
 
@@ -707,9 +746,59 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "No File", "Please open a PDF file first")
             return
 
+        # Switch to PDF Viewer tab
+        self.tab_widget.setCurrentIndex(1)
+
+        # Ensure file is loaded in viewer
+        if not self.pdf_viewer_tab.current_document:
+            self.pdf_viewer_tab.load_file(self.current_file)
+
         self.status_bar.showMessage("Validating WCAG compliance...", 0)
-        # Validation will be handled by the tag editor or core module
-        logger.info("WCAG validation triggered")
+
+        result = self.pdf_viewer_tab.run_validation()
+
+        if result is None:
+            self.status_bar.showMessage("Validation failed - no document loaded", 5000)
+            return
+
+        # Update status bar
+        if result.is_compliant:
+            self.compliance_status.setText(
+                f"WCAG {result.level.value}: Compliant ({result.score:.0f}%)"
+            )
+            self.compliance_status.setStyleSheet(f"color: #22C55E; font-size: 12pt;")
+        else:
+            self.compliance_status.setText(
+                f"WCAG {result.level.value}: Non-compliant ({result.score:.0f}%)"
+            )
+            self.compliance_status.setStyleSheet(f"color: #EF4444; font-size: 12pt;")
+
+        self.status_bar.showMessage(
+            f"Validation complete: {result.summary['errors']} errors, "
+            f"{result.summary['warnings']} warnings",
+            5000,
+        )
+
+        # Show result dialog
+        if result.is_compliant:
+            QMessageBox.information(
+                self,
+                "WCAG Validation",
+                f"Document is WCAG {result.level.value} compliant!\n\n"
+                f"Score: {result.score:.0f}%\n"
+                f"Warnings: {result.summary['warnings']}",
+            )
+        else:
+            QMessageBox.warning(
+                self,
+                "WCAG Validation",
+                f"Document is NOT WCAG {result.level.value} compliant.\n\n"
+                f"Score: {result.score:.0f}%\n"
+                f"Errors: {result.summary['errors']}\n"
+                f"Warnings: {result.summary['warnings']}",
+            )
+
+        logger.info(f"WCAG validation complete: score={result.score}")
 
     def get_ai_suggestions(self) -> None:
         """Get AI-powered suggestions."""
@@ -717,17 +806,21 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "No File", "Please open a PDF file first")
             return
 
+        # Switch to PDF Viewer tab
+        self.tab_widget.setCurrentIndex(1)
+
+        # Ensure file is loaded in viewer
+        if not self.pdf_viewer_tab.current_document:
+            self.pdf_viewer_tab.load_file(self.current_file)
+
         self.status_bar.showMessage("Getting AI suggestions...", 0)
+        self.pdf_viewer_tab.refresh_analysis()
         logger.info("AI suggestions triggered")
 
     def show_batch_dialog(self) -> None:
         """Show batch processing dialog."""
-        QMessageBox.information(
-            self,
-            "Batch Processing",
-            "Batch processing allows you to process multiple PDFs at once.\n\n"
-            "Configure batch limit in Settings (1-10 files).",
-        )
+        dialog = BatchDialog(self)
+        dialog.exec()
 
     # ==================== View Actions ====================
 
@@ -853,20 +946,22 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:
         """Handle window close event."""
-        # Check for unsaved changes
-        reply = QMessageBox.question(
-            self,
-            "Exit",
-            "Are you sure you want to exit?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
+        has_changes = self.pdf_viewer_tab.has_unsaved_changes
 
-        if reply == QMessageBox.StandardButton.Yes:
-            logger.info("Application closing")
-            event.accept()
-        else:
-            event.ignore()
+        if has_changes:
+            reply = QMessageBox.question(
+                self,
+                "Unsaved Changes",
+                "You have unsaved changes. Are you sure you want to exit?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.No:
+                event.ignore()
+                return
+
+        logger.info("Application closing")
+        event.accept()
 
     def set_user(self, user: User) -> None:
         """Set the current user."""

@@ -34,7 +34,7 @@ TUTORIAL_STEPS: List[Dict[str, str]] = [
             "Click 'Next' to continue through the tutorial, or 'Skip' to close it at any time. "
             "You can always access this tutorial again by clicking the 'Tutorial' button."
         ),
-        "icon": "📖",
+        "icon": "\u2630",  # trigram / menu lines
     },
     {
         "title": "Navigation Panel (Left Side)",
@@ -43,12 +43,12 @@ TUTORIAL_STEPS: List[Dict[str, str]] = [
             "It also includes page controls, zoom settings, and a search feature to find text in your document."
         ),
         "how_to_use": (
-            "• Click on a page thumbnail to jump to that page\n"
-            "• Use the zoom slider or +/- buttons to change zoom level\n"
-            "• Type in the search box to find text in your PDF\n"
-            "• Use the page number input to go to a specific page"
+            "\u2022 Click on a page thumbnail to jump to that page\n"
+            "\u2022 Use the zoom slider or +/- buttons to change zoom level\n"
+            "\u2022 Type in the search box to find text in your PDF\n"
+            "\u2022 Use the page number input to go to a specific page"
         ),
-        "icon": "📑",
+        "icon": "\u2750",  # upper right drop-shadowed square
     },
     {
         "title": "PDF Viewer (Center)",
@@ -57,14 +57,14 @@ TUTORIAL_STEPS: List[Dict[str, str]] = [
             "Different colors indicate different types of issues that need attention."
         ),
         "how_to_use": (
-            "• Purple overlays = Headings\n"
-            "• Yellow overlays = Images needing alt text\n"
-            "• Green overlays = Tables\n"
-            "• Orange overlays = Links\n"
-            "• Red overlays = Issues needing immediate attention\n\n"
+            "\u2022 Purple overlays = Headings\n"
+            "\u2022 Yellow overlays = Images needing alt text\n"
+            "\u2022 Green overlays = Tables\n"
+            "\u2022 Orange overlays = Links\n"
+            "\u2022 Red overlays = Issues needing immediate attention\n\n"
             "Click on any overlay to see its details in the AI Suggestions panel."
         ),
-        "icon": "👁️",
+        "icon": "\u25A2",  # white square with rounded corners
     },
     {
         "title": "AI Suggestions Panel (Right Side)",
@@ -73,25 +73,25 @@ TUTORIAL_STEPS: List[Dict[str, str]] = [
             "Issues are organized into categories: Document Properties, Headings, Images, Tables, Links, and Reading Order."
         ),
         "how_to_use": (
-            "• Expand each section by clicking its header\n"
-            "• Review each suggestion - the AI will propose fixes for issues\n"
-            "• You can edit the AI's suggestion before applying it\n"
-            "• Click 'Apply' to accept a fix, 'Edit' to modify it, or 'Skip' to ignore it"
+            "\u2022 Expand each section by clicking its header\n"
+            "\u2022 Review each suggestion - the AI will propose fixes for issues\n"
+            "\u2022 You can edit the AI's suggestion before applying it\n"
+            "\u2022 Click 'Apply' to accept a fix, 'Edit' to modify it, or 'Skip' to ignore it"
         ),
-        "icon": "🤖",
+        "icon": "\u2662",  # white diamond suit
     },
     {
         "title": "Review Mode Options",
         "description": (
             "Choose how you want to review AI suggestions:\n\n"
-            "• Auto-Accept Mode: Automatically applies all AI suggestions (faster but less control)\n"
-            "• Manual Review Mode: Review each suggestion individually (recommended for important documents)"
+            "\u2022 Auto-Accept Mode: Automatically applies all AI suggestions (faster but less control)\n"
+            "\u2022 Manual Review Mode: Review each suggestion individually (recommended for important documents)"
         ),
         "how_to_use": (
             "Select your preferred mode at the top of the AI Suggestions panel. "
             "Manual Review is selected by default for maximum control over changes."
         ),
-        "icon": "⚙️",
+        "icon": "\u2699",  # gear
     },
     {
         "title": "Adding Alt Text to Images",
@@ -106,13 +106,13 @@ TUTORIAL_STEPS: List[Dict[str, str]] = [
             "4. Click 'Apply' to add the alt text to the image\n\n"
             "Good alt text describes the image's content and purpose, not just 'an image'."
         ),
-        "icon": "🖼️",
+        "icon": "\u29C9",  # two joined squares
     },
     {
         "title": "Fixing Heading Structure",
         "description": (
             "Proper heading structure helps screen reader users navigate your document. "
-            "Headings should be hierarchical (H1 → H2 → H3) without skipping levels."
+            "Headings should be hierarchical (H1 \u2192 H2 \u2192 H3) without skipping levels."
         ),
         "how_to_use": (
             "1. Open the 'Headings' section in AI Suggestions\n"
@@ -120,7 +120,7 @@ TUTORIAL_STEPS: List[Dict[str, str]] = [
             "3. The AI will suggest the correct heading level\n"
             "4. Apply the fix or manually adjust the heading level"
         ),
-        "icon": "📝",
+        "icon": "\u2261",  # identical to (triple bar)
     },
     {
         "title": "Table Accessibility",
@@ -134,7 +134,7 @@ TUTORIAL_STEPS: List[Dict[str, str]] = [
             "3. Confirm or adjust which rows/columns are headers\n"
             "4. Apply the changes to make tables accessible"
         ),
-        "icon": "📊",
+        "icon": "\u2637",  # trigram for earth (grid-like)
     },
     {
         "title": "Link Text",
@@ -148,7 +148,7 @@ TUTORIAL_STEPS: List[Dict[str, str]] = [
             "3. Edit the suggested link text to be more descriptive\n"
             "4. Apply the change"
         ),
-        "icon": "🔗",
+        "icon": "\u2197",  # north east arrow
     },
     {
         "title": "Batch Actions",
@@ -156,13 +156,13 @@ TUTORIAL_STEPS: List[Dict[str, str]] = [
             "You can apply multiple fixes at once using the batch action buttons at the bottom of the AI Suggestions panel."
         ),
         "how_to_use": (
-            "• 'Select All' / 'Deselect All' - Check/uncheck all items\n"
-            "• 'Apply Selected' - Apply only the checked items\n"
-            "• 'Apply All Remaining' - Apply all unapplied suggestions\n"
-            "• 'Undo Last' - Reverse the most recent change\n"
-            "• 'Preview Changes' - See what will be modified before saving"
+            "\u2022 'Select All' / 'Deselect All' - Check/uncheck all items\n"
+            "\u2022 'Apply Selected' - Apply only the checked items\n"
+            "\u2022 'Apply All Remaining' - Apply all unapplied suggestions\n"
+            "\u2022 'Undo Last' - Reverse the most recent change\n"
+            "\u2022 'Preview Changes' - See what will be modified before saving"
         ),
-        "icon": "✅",
+        "icon": "\u2611",  # ballot box with check
     },
     {
         "title": "Saving Your Work",
@@ -171,30 +171,30 @@ TUTORIAL_STEPS: List[Dict[str, str]] = [
             "You can also manually save at any time."
         ),
         "how_to_use": (
-            "• Click 'Save & Export PDF' in the AI Suggestions panel\n"
-            "• Or use Ctrl+S (Cmd+S on Mac) to save\n"
-            "• Choose 'Save As' to create a new accessible version\n"
-            "• Auto-save keeps your work safe (every 60 seconds)\n\n"
+            "\u2022 Click 'Save & Export PDF' in the AI Suggestions panel\n"
+            "\u2022 Or use Ctrl+S (Cmd+S on Mac) to save\n"
+            "\u2022 Choose 'Save As' to create a new accessible version\n"
+            "\u2022 Auto-save keeps your work safe (every 60 seconds)\n\n"
             "A '_tagged' suffix is added to the filename by default."
         ),
-        "icon": "💾",
+        "icon": "\u2193",  # downwards arrow (save)
     },
     {
         "title": "You're Ready!",
         "description": (
             "You now know the basics of making PDFs accessible with this toolkit!\n\n"
             "Remember:\n"
-            "• All images need alt text\n"
-            "• Headings should be properly structured\n"
-            "• Tables need headers\n"
-            "• Links need descriptive text"
+            "\u2022 All images need alt text\n"
+            "\u2022 Headings should be properly structured\n"
+            "\u2022 Tables need headers\n"
+            "\u2022 Links need descriptive text"
         ),
         "how_to_use": (
             "Start by reviewing the AI Suggestions on the right panel. "
             "Work through each category to ensure your document is fully accessible.\n\n"
-            "Good luck making the web more accessible! 🎉"
+            "Good luck making the web more accessible!"
         ),
-        "icon": "🎓",
+        "icon": "\u2605",  # black star
     },
 ]
 
@@ -337,7 +337,7 @@ class TutorialDialog(QDialog):
 
         button_layout.addStretch()
 
-        self._prev_btn = QPushButton("← Previous")
+        self._prev_btn = QPushButton("\u2190 Previous")
         self._prev_btn.clicked.connect(self._prev_step)
         self._prev_btn.setStyleSheet(self._get_button_style(primary=False))
         self._prev_btn.setFixedWidth(120)
@@ -394,7 +394,7 @@ class TutorialDialog(QDialog):
         """Update the dialog content for the current step."""
         step = self._steps[self._current_step]
 
-        self._icon_label.setText(step.get("icon", "📖"))
+        self._icon_label.setText(step.get("icon", "\u2630"))
         self._title_label.setText(step["title"])
         self._description_label.setText(step["description"])
         self._how_to_label.setText(step["how_to_use"])
@@ -407,9 +407,9 @@ class TutorialDialog(QDialog):
         self._prev_btn.setEnabled(self._current_step > 0)
 
         if self._current_step >= len(self._steps) - 1:
-            self._next_btn.setText("Finish ✓")
+            self._next_btn.setText("Finish \u2713")
         else:
-            self._next_btn.setText("Next →")
+            self._next_btn.setText("Next \u2192")
 
     def _next_step(self) -> None:
         """Go to the next step."""

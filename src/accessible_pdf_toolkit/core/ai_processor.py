@@ -500,7 +500,7 @@ class CloudAPIProcessor(AIProcessor):
     """Cloud API processor (OpenAI/Anthropic) with privacy warnings."""
 
     PRIVACY_WARNING = """
-⚠️ PRIVACY WARNING: You are using a cloud AI service.
+WARNING: You are using a cloud AI service.
 - Document content will be sent to external servers
 - This may not be compliant with FERPA/HIPAA requirements
 - Consider using local AI (Ollama, LM Studio, GPT4All) for sensitive documents

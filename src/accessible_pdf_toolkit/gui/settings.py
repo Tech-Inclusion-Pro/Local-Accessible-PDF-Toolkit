@@ -251,7 +251,7 @@ class SettingsPanel(QWidget):
 
         # Privacy warning for cloud
         self.privacy_warning = QLabel(
-            "⚠️ <b>Privacy Warning:</b> Cloud APIs send data to external servers. "
+            "\u25B3 <b>Privacy Warning:</b> Cloud APIs send data to external servers. "
             "This may not be FERPA/HIPAA compliant for sensitive documents."
         )
         self.privacy_warning.setWordWrap(True)

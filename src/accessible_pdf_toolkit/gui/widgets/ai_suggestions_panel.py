@@ -38,11 +38,11 @@ class SuggestionItem(QFrame):
     selected = pyqtSignal(object)
 
     STATUS_ICONS = {
-        "correct": "\u2705",      # Green checkmark
-        "needs_attention": "\u26A0\uFE0F",  # Warning
-        "missing": "\u274C",      # Red X
-        "applied": "\u2714",      # Checkmark
-        "skipped": "\u23E9",      # Fast forward
+        "correct": "\u2713",      # Simple checkmark
+        "needs_attention": "\u25B3",  # White up-pointing triangle
+        "missing": "\u2717",      # Ballot X
+        "applied": "\u2713",      # Checkmark
+        "skipped": "\u2192",      # Right arrow
     }
 
     def __init__(
@@ -74,7 +74,7 @@ class SuggestionItem(QFrame):
 
         # Status icon
         status = self._detection.get("status", "needs_attention")
-        self._status_label = QLabel(self.STATUS_ICONS.get(status, "\u2753"))
+        self._status_label = QLabel(self.STATUS_ICONS.get(status, "\u2014"))
         self._status_label.setFixedWidth(24)
         header.addWidget(self._status_label)
 
@@ -291,42 +291,42 @@ class AISuggestionsPanel(QWidget):
         self._scroll_layout.setSpacing(0)
 
         # Document Properties section
-        self._doc_section = AccordionSection("Document Properties", icon="\uD83D\uDCC4", expanded=True)
+        self._doc_section = AccordionSection("Document Properties", icon="\u25A1", expanded=True)
         self._doc_content = QWidget()
         self._doc_layout = QVBoxLayout(self._doc_content)
         self._doc_section.set_content(self._doc_content)
         self._scroll_layout.addWidget(self._doc_section)
 
         # Headings section
-        self._headings_section = AccordionSection("Headings", icon="\uD83D\uDCDD", badge_count=0)
+        self._headings_section = AccordionSection("Headings", icon="\u2261", badge_count=0)
         self._headings_content = QWidget()
         self._headings_layout = QVBoxLayout(self._headings_content)
         self._headings_section.set_content(self._headings_content)
         self._scroll_layout.addWidget(self._headings_section)
 
         # Images section
-        self._images_section = AccordionSection("Images", icon="\uD83D\uDDBC", badge_count=0)
+        self._images_section = AccordionSection("Images", icon="\u29C9", badge_count=0)
         self._images_content = QWidget()
         self._images_layout = QVBoxLayout(self._images_content)
         self._images_section.set_content(self._images_content)
         self._scroll_layout.addWidget(self._images_section)
 
         # Tables section
-        self._tables_section = AccordionSection("Tables", icon="\uD83D\uDCCA", badge_count=0)
+        self._tables_section = AccordionSection("Tables", icon="\u2637", badge_count=0)
         self._tables_content = QWidget()
         self._tables_layout = QVBoxLayout(self._tables_content)
         self._tables_section.set_content(self._tables_content)
         self._scroll_layout.addWidget(self._tables_section)
 
         # Links section
-        self._links_section = AccordionSection("Links", icon="\uD83D\uDD17", badge_count=0)
+        self._links_section = AccordionSection("Links", icon="\u2197", badge_count=0)
         self._links_content = QWidget()
         self._links_layout = QVBoxLayout(self._links_content)
         self._links_section.set_content(self._links_content)
         self._scroll_layout.addWidget(self._links_section)
 
         # Reading Order section
-        self._order_section = AccordionSection("Reading Order", icon="\uD83D\uDD22", badge_count=0)
+        self._order_section = AccordionSection("Reading Order", icon="\u2195", badge_count=0)
         self._order_content = QWidget()
         self._order_layout = QVBoxLayout(self._order_content)
         self._order_section.set_content(self._order_content)
@@ -374,7 +374,7 @@ class AISuggestionsPanel(QWidget):
         # Secondary actions
         secondary_row = QHBoxLayout()
 
-        self._preview_btn = QPushButton("\uD83D\uDC41 Preview Changes")
+        self._preview_btn = QPushButton("\u25A2 Preview Changes")
         self._preview_btn.clicked.connect(self.preview_requested.emit)
         secondary_row.addWidget(self._preview_btn)
 
@@ -385,7 +385,7 @@ class AISuggestionsPanel(QWidget):
         actions_layout.addLayout(secondary_row)
 
         # Save button
-        self._save_btn = QPushButton("\uD83D\uDCBE Save & Export PDF")
+        self._save_btn = QPushButton("\u2193 Save & Export PDF")
         self._save_btn.clicked.connect(self.save_requested.emit)
         self._save_btn.setObjectName("saveBtn")
         actions_layout.addWidget(self._save_btn)
@@ -520,7 +520,7 @@ class AISuggestionsPanel(QWidget):
         for label, value, suggestion in props:
             row = QHBoxLayout()
 
-            status_icon = "\u2705" if value else "\u26A0\uFE0F"
+            status_icon = "\u2713" if value else "\u25B3"
             row.addWidget(QLabel(f"{status_icon} {label}:"))
 
             if value:

@@ -11,12 +11,15 @@ from PyQt6.QtWidgets import (
     QLabel,
     QProgressBar,
     QFrame,
+    QScrollArea,
+    QPushButton,
+    QSizePolicy,
 )
-from PyQt6.QtCore import Qt, pyqtProperty, QPropertyAnimation, QEasingCurve
+from PyQt6.QtCore import Qt, pyqtProperty, pyqtSignal, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QPainter, QColor, QPen, QFont
 
 from ...utils.constants import COLORS, WCAGLevel, ComplianceStatus
-from ...core.wcag_validator import ValidationResult
+from ...core.wcag_validator import ValidationResult, ValidationIssue, IssueSeverity
 
 
 class CircularProgress(QWidget):
@@ -45,12 +48,12 @@ class CircularProgress(QWidget):
 
     def setValue(self, value: int) -> None:
         """Set the progress value with animation."""
-        animation = QPropertyAnimation(self, b"value")
-        animation.setDuration(500)
-        animation.setStartValue(self._value)
-        animation.setEndValue(value)
-        animation.setEasingCurve(QEasingCurve.Type.OutCubic)
-        animation.start()
+        self._animation = QPropertyAnimation(self, b"value")
+        self._animation.setDuration(500)
+        self._animation.setStartValue(self._value)
+        self._animation.setEndValue(value)
+        self._animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._animation.start()
 
     def setColor(self, color: str) -> None:
         """Set the progress color."""
@@ -97,6 +100,10 @@ class CircularProgress(QWidget):
 
 class ComplianceMeter(QWidget):
     """Widget displaying WCAG compliance status and score."""
+
+    # Signals for issue interaction
+    issue_fix_requested = pyqtSignal(object)  # ValidationIssue
+    issue_navigate_requested = pyqtSignal(int)  # page number
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -183,7 +190,29 @@ class ComplianceMeter(QWidget):
         summary_layout.addWidget(self.info_label)
 
         layout.addWidget(self.summary_frame)
-        layout.addStretch()
+
+        # Issues list (scrollable)
+        issues_label = QLabel("Issue Details")
+        issues_label.setStyleSheet(f"font-weight: bold; color: {COLORS.TEXT_PRIMARY}; font-size: 12pt;")
+        layout.addWidget(issues_label)
+
+        self._issues_scroll = QScrollArea()
+        self._issues_scroll.setWidgetResizable(True)
+        self._issues_scroll.setStyleSheet(f"""
+            QScrollArea {{
+                border: 1px solid {COLORS.BORDER};
+                border-radius: 4px;
+                background-color: {COLORS.BACKGROUND};
+            }}
+        """)
+        self._issues_container = QWidget()
+        self._issues_layout = QVBoxLayout(self._issues_container)
+        self._issues_layout.setContentsMargins(4, 4, 4, 4)
+        self._issues_layout.setSpacing(4)
+        self._issues_layout.addStretch()
+        self._issues_scroll.setWidget(self._issues_container)
+
+        layout.addWidget(self._issues_scroll, 1)  # stretch factor 1 to fill space
 
     def _setup_accessibility(self) -> None:
         """Set up accessibility features."""
@@ -244,6 +273,116 @@ class ComplianceMeter(QWidget):
             f"{summary.get('warnings', 0)} warnings."
         )
 
+        # Populate clickable issues list
+        self._populate_issues(result)
+
+    def _clear_issues(self) -> None:
+        """Remove all issue widgets from the issues list."""
+        while self._issues_layout.count() > 0:
+            item = self._issues_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+
+    def _populate_issues(self, result: ValidationResult) -> None:
+        """Populate the scrollable issues list with clickable issue widgets."""
+        self._clear_issues()
+
+        if not result.issues:
+            no_issues = QLabel("No issues found!")
+            no_issues.setStyleSheet(f"color: {COLORS.SUCCESS}; font-size: 11pt; padding: 8px;")
+            no_issues.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._issues_layout.addWidget(no_issues)
+            self._issues_layout.addStretch()
+            return
+
+        # Color map for severity border
+        severity_colors = {
+            IssueSeverity.ERROR: COLORS.ERROR,
+            IssueSeverity.WARNING: COLORS.WARNING,
+            IssueSeverity.INFO: COLORS.INFO,
+        }
+
+        for issue in result.issues:
+            border_color = severity_colors.get(issue.severity, COLORS.INFO)
+
+            issue_frame = QFrame()
+            issue_frame.setStyleSheet(f"""
+                QFrame {{
+                    background-color: {COLORS.SURFACE};
+                    border-left: 4px solid {border_color};
+                    border-radius: 2px;
+                    padding: 4px;
+                }}
+            """)
+            issue_layout = QVBoxLayout(issue_frame)
+            issue_layout.setContentsMargins(8, 4, 4, 4)
+            issue_layout.setSpacing(2)
+
+            # Criterion + severity
+            header = QLabel(f"[{issue.criterion}] {issue.severity.value.upper()}")
+            header.setStyleSheet(f"color: {border_color}; font-size: 9pt; font-weight: bold;")
+            issue_layout.addWidget(header)
+
+            # Message
+            msg = QLabel(issue.message)
+            msg.setWordWrap(True)
+            msg.setStyleSheet(f"color: {COLORS.TEXT_PRIMARY}; font-size: 10pt;")
+            issue_layout.addWidget(msg)
+
+            # Action buttons row
+            btn_row = QHBoxLayout()
+            btn_row.setSpacing(4)
+
+            if issue.page:
+                page_btn = QPushButton(f"Page {issue.page}")
+                page_btn.setFixedHeight(22)
+                page_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {COLORS.BACKGROUND_ALT};
+                        color: {COLORS.TEXT_SECONDARY};
+                        border: 1px solid {COLORS.BORDER};
+                        border-radius: 2px;
+                        padding: 1px 6px;
+                        font-size: 9pt;
+                    }}
+                    QPushButton:hover {{
+                        background-color: {COLORS.PRIMARY};
+                        color: white;
+                    }}
+                """)
+                page_num = issue.page
+                page_btn.clicked.connect(lambda checked, p=page_num: self.issue_navigate_requested.emit(p))
+                btn_row.addWidget(page_btn)
+
+            if issue.auto_fixable:
+                fix_btn = QPushButton("Fix")
+                fix_btn.setFixedHeight(22)
+                fix_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {COLORS.SUCCESS};
+                        color: white;
+                        border: none;
+                        border-radius: 2px;
+                        padding: 1px 8px;
+                        font-size: 9pt;
+                        font-weight: bold;
+                    }}
+                    QPushButton:hover {{
+                        background-color: #16A34A;
+                    }}
+                """)
+                current_issue = issue
+                fix_btn.clicked.connect(lambda checked, i=current_issue: self.issue_fix_requested.emit(i))
+                btn_row.addWidget(fix_btn)
+
+            btn_row.addStretch()
+            issue_layout.addLayout(btn_row)
+
+            self._issues_layout.addWidget(issue_frame)
+
+        self._issues_layout.addStretch()
+
     def set_level(self, level: WCAGLevel) -> None:
         """Set the target WCAG level."""
         self.level_value.setText(level.value)
@@ -261,3 +400,4 @@ class ComplianceMeter(QWidget):
         self.errors_label.setText("Errors: 0")
         self.warnings_label.setText("Warnings: 0")
         self.info_label.setText("Info: 0")
+        self._clear_issues()
