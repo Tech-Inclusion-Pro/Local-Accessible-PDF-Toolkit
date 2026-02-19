@@ -27,6 +27,8 @@ from ..utils.constants import (
     COLORS,
     AIBackend,
     WCAGLevel,
+    ColorBlindMode,
+    CustomCursorStyle,
     DEFAULT_CONFIG,
     MIN_BATCH_SIZE,
     MAX_BATCH_SIZE,
@@ -484,9 +486,9 @@ class SettingsPanel(QWidget):
         return self._create_scroll_widget(container)
 
     def _create_accessibility_settings(self) -> QWidget:
-        """Create accessibility settings panel."""
+        """Create accessibility settings panel matching MycoFolio format."""
         container = QWidget()
-        container.setStyleSheet(f"""
+        base_style = f"""
             QWidget {{
                 background-color: {COLORS.BACKGROUND};
                 color: {COLORS.TEXT_PRIMARY};
@@ -541,12 +543,96 @@ class SettingsPanel(QWidget):
                 border: 2px solid {COLORS.BORDER};
                 border-radius: 3px;
             }}
-        """)
+        """
+        container.setStyleSheet(base_style)
         layout = QVBoxLayout(container)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(16)
 
-        # WCAG Level
+        # ── Display & Visual Accessibility ──────────────────────
+        display_group = QGroupBox("Display & Visual Accessibility")
+        display_layout = QVBoxLayout(display_group)
+        display_layout.setSpacing(12)
+
+        # High Contrast Mode
+        self.high_contrast_cb = QCheckBox("High Contrast Mode")
+        self.high_contrast_cb.setAccessibleName("High contrast mode")
+        self.high_contrast_cb.setToolTip("Increase contrast for better visibility")
+        display_layout.addWidget(self.high_contrast_cb)
+        hc_desc = QLabel("Increase contrast for better visibility")
+        hc_desc.setStyleSheet(f"color: {COLORS.TEXT_SECONDARY}; font-size: 10pt; margin-left: 26px;")
+        display_layout.addWidget(hc_desc)
+
+        # Reduced Motion
+        self.reduced_motion_cb = QCheckBox("Reduced Motion")
+        self.reduced_motion_cb.setAccessibleName("Reduced motion")
+        self.reduced_motion_cb.setToolTip("Disable animations throughout the application")
+        display_layout.addWidget(self.reduced_motion_cb)
+        rm_desc = QLabel("Disable animations")
+        rm_desc.setStyleSheet(f"color: {COLORS.TEXT_SECONDARY}; font-size: 10pt; margin-left: 26px;")
+        display_layout.addWidget(rm_desc)
+
+        # Large Text Mode
+        self.large_text_cb = QCheckBox("Large Text Mode")
+        self.large_text_cb.setAccessibleName("Large text mode")
+        self.large_text_cb.setToolTip("Increase font size by 25%")
+        display_layout.addWidget(self.large_text_cb)
+        lt_desc = QLabel("Increase font size by 25%")
+        lt_desc.setStyleSheet(f"color: {COLORS.TEXT_SECONDARY}; font-size: 10pt; margin-left: 26px;")
+        display_layout.addWidget(lt_desc)
+
+        # Enhanced Focus Indicators
+        self.enhanced_focus_cb = QCheckBox("Enhanced Focus Indicators")
+        self.enhanced_focus_cb.setAccessibleName("Enhanced focus indicators")
+        self.enhanced_focus_cb.setToolTip("Larger, more visible focus outlines")
+        display_layout.addWidget(self.enhanced_focus_cb)
+        ef_desc = QLabel("Larger, more visible focus outlines")
+        ef_desc.setStyleSheet(f"color: {COLORS.TEXT_SECONDARY}; font-size: 10pt; margin-left: 26px;")
+        display_layout.addWidget(ef_desc)
+
+        # Dyslexia-Friendly Font
+        self.dyslexia_font_cb = QCheckBox("Dyslexia-Friendly Font")
+        self.dyslexia_font_cb.setAccessibleName("Dyslexia-friendly font")
+        self.dyslexia_font_cb.setToolTip("Use OpenDyslexic font style")
+        display_layout.addWidget(self.dyslexia_font_cb)
+        df_desc = QLabel("Use OpenDyslexic font style with wider letter and word spacing")
+        df_desc.setWordWrap(True)
+        df_desc.setStyleSheet(f"color: {COLORS.TEXT_SECONDARY}; font-size: 10pt; margin-left: 26px;")
+        display_layout.addWidget(df_desc)
+
+        # Color Blindness Mode
+        cb_row = QHBoxLayout()
+        cb_label = QLabel("Color Blindness Mode:")
+        cb_row.addWidget(cb_label)
+        self.color_blind_combo = QComboBox()
+        self.color_blind_combo.addItem("None (Default)", ColorBlindMode.NONE.value)
+        self.color_blind_combo.addItem("Deuteranopia (Green-blind)", ColorBlindMode.DEUTERANOPIA.value)
+        self.color_blind_combo.addItem("Protanopia (Red-blind)", ColorBlindMode.PROTANOPIA.value)
+        self.color_blind_combo.addItem("Tritanopia (Blue-blind)", ColorBlindMode.TRITANOPIA.value)
+        self.color_blind_combo.addItem("Monochrome (Grayscale)", ColorBlindMode.MONOCHROME.value)
+        self.color_blind_combo.setAccessibleName("Color blindness mode")
+        cb_row.addWidget(self.color_blind_combo)
+        cb_row.addStretch()
+        display_layout.addLayout(cb_row)
+
+        # Custom Cursor
+        cursor_row = QHBoxLayout()
+        cursor_label = QLabel("Custom Cursor:")
+        cursor_row.addWidget(cursor_label)
+        self.custom_cursor_combo = QComboBox()
+        self.custom_cursor_combo.addItem("System Default", CustomCursorStyle.DEFAULT.value)
+        self.custom_cursor_combo.addItem("Large Black Cursor", CustomCursorStyle.LARGE_BLACK.value)
+        self.custom_cursor_combo.addItem("Large White Cursor", CustomCursorStyle.LARGE_WHITE.value)
+        self.custom_cursor_combo.addItem("Large Crosshair", CustomCursorStyle.LARGE_CROSSHAIR.value)
+        self.custom_cursor_combo.addItem("High Visibility (Yellow/Black)", CustomCursorStyle.HIGH_VISIBILITY.value)
+        self.custom_cursor_combo.setAccessibleName("Custom cursor style")
+        cursor_row.addWidget(self.custom_cursor_combo)
+        cursor_row.addStretch()
+        display_layout.addLayout(cursor_row)
+
+        layout.addWidget(display_group)
+
+        # ── WCAG Compliance Level ───────────────────────────────
         wcag_group = QGroupBox("WCAG Compliance Level")
         wcag_layout = QVBoxLayout(wcag_group)
 
@@ -554,7 +640,7 @@ class SettingsPanel(QWidget):
         self.wcag_level.addItem("Level A (Minimum)", WCAGLevel.A.value)
         self.wcag_level.addItem("Level AA (Recommended)", WCAGLevel.AA.value)
         self.wcag_level.addItem("Level AAA (Enhanced)", WCAGLevel.AAA.value)
-        self.wcag_level.setCurrentIndex(1)  # Default to AA
+        self.wcag_level.setCurrentIndex(1)
         self.wcag_level.setAccessibleName("WCAG compliance level")
         wcag_layout.addWidget(self.wcag_level)
 
@@ -568,7 +654,7 @@ class SettingsPanel(QWidget):
 
         layout.addWidget(wcag_group)
 
-        # Validation checks
+        # ── Validation Checks ───────────────────────────────────
         checks_group = QGroupBox("Validation Checks")
         checks_layout = QVBoxLayout(checks_group)
 
@@ -689,9 +775,6 @@ class SettingsPanel(QWidget):
         theme_row.addStretch()
 
         theme_layout.addLayout(theme_row)
-
-        self.high_contrast_cb = QCheckBox("High contrast mode")
-        theme_layout.addWidget(self.high_contrast_cb)
 
         layout.addWidget(theme_group)
 
@@ -976,6 +1059,21 @@ class SettingsPanel(QWidget):
             self.theme_combo.setCurrentIndex(index)
 
         self.high_contrast_cb.setChecked(ui.get("high_contrast", False))
+        self.reduced_motion_cb.setChecked(ui.get("reduced_motion", False))
+        self.large_text_cb.setChecked(ui.get("large_text_mode", False))
+        self.enhanced_focus_cb.setChecked(ui.get("enhanced_focus", False))
+        self.dyslexia_font_cb.setChecked(ui.get("dyslexia_font", False))
+
+        cb_mode = ui.get("color_blind_mode", ColorBlindMode.NONE.value)
+        cb_idx = self.color_blind_combo.findData(cb_mode)
+        if cb_idx >= 0:
+            self.color_blind_combo.setCurrentIndex(cb_idx)
+
+        cursor_style = ui.get("custom_cursor", CustomCursorStyle.DEFAULT.value)
+        cursor_idx = self.custom_cursor_combo.findData(cursor_style)
+        if cursor_idx >= 0:
+            self.custom_cursor_combo.setCurrentIndex(cursor_idx)
+
         self.font_size.setValue(ui.get("font_size", 12))
         self.show_line_numbers_cb.setChecked(ui.get("show_line_numbers", True))
         self.auto_preview_cb.setChecked(ui.get("auto_preview", True))
@@ -1012,6 +1110,12 @@ class SettingsPanel(QWidget):
             "ui": {
                 "theme": self.theme_combo.currentData(),
                 "high_contrast": self.high_contrast_cb.isChecked(),
+                "reduced_motion": self.reduced_motion_cb.isChecked(),
+                "large_text_mode": self.large_text_cb.isChecked(),
+                "enhanced_focus": self.enhanced_focus_cb.isChecked(),
+                "dyslexia_font": self.dyslexia_font_cb.isChecked(),
+                "color_blind_mode": self.color_blind_combo.currentData(),
+                "custom_cursor": self.custom_cursor_combo.currentData(),
                 "font_size": self.font_size.value(),
                 "show_line_numbers": self.show_line_numbers_cb.isChecked(),
                 "auto_preview": self.auto_preview_cb.isChecked(),

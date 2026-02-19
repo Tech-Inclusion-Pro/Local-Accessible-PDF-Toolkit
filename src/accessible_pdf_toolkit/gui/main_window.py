@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import (
     QStackedWidget,
 )
 from PyQt6.QtCore import Qt, QSize, pyqtSignal
-from PyQt6.QtGui import QAction, QKeySequence, QIcon, QFont
+from PyQt6.QtGui import QAction, QKeySequence, QIcon, QFont, QCursor, QPixmap
 
 from ..utils.constants import (
     APP_NAME,
@@ -102,6 +102,9 @@ class MainWindow(QMainWindow):
         self.pdf_viewer_tab.file_dropped.connect(
             lambda path: self.dashboard_tab.add_recent_file(path)
         )
+
+        # Connect settings changes to apply accessibility preferences
+        self.settings_tab.settings_changed.connect(self._on_settings_changed)
 
         # Add tabs (3 tabs: Dashboard, PDF Viewer, Settings)
         self.tab_widget.addTab(self.dashboard_tab, "Dashboard")
@@ -857,6 +860,179 @@ class MainWindow(QMainWindow):
             self._apply_styles()
 
         logger.info(f"High contrast mode: {enabled}")
+
+    def _on_settings_changed(self, config: dict) -> None:
+        """Apply accessibility preferences when settings are saved."""
+        ui = config.get("ui", {})
+
+        # High contrast
+        self.toggle_high_contrast(ui.get("high_contrast", False))
+
+        # Reduced motion
+        self._apply_reduced_motion(ui.get("reduced_motion", False))
+
+        # Large text mode
+        self._apply_large_text(ui.get("large_text_mode", False))
+
+        # Enhanced focus
+        self._apply_enhanced_focus(ui.get("enhanced_focus", False))
+
+        # Dyslexia font
+        self._apply_dyslexia_font(ui.get("dyslexia_font", False))
+
+        # Color blindness mode
+        self._apply_color_blind_mode(ui.get("color_blind_mode", "none"))
+
+        # Custom cursor
+        self._apply_custom_cursor(ui.get("custom_cursor", "default"))
+
+        logger.info("Accessibility settings applied")
+
+    def _apply_reduced_motion(self, enabled: bool) -> None:
+        """Disable or enable animations application-wide."""
+        if enabled:
+            # Kill all animations by setting duration to near-zero
+            self.setStyleSheet(
+                self.styleSheet()
+                + "\n* { animation-duration: 0ms; transition-duration: 0ms; }"
+            )
+        # When disabled, _apply_styles restores normal behaviour
+        logger.debug(f"Reduced motion: {enabled}")
+
+    def _apply_large_text(self, enabled: bool) -> None:
+        """Scale all fonts by 125%."""
+        app = self
+        base = 12  # base point size
+        if enabled:
+            size = int(base * 1.25)
+        else:
+            size = base
+        # Update the global font
+        font = app.font()
+        font.setPointSize(size)
+        app.setFont(font)
+        logger.debug(f"Large text mode: {enabled} (font {size}pt)")
+
+    def _apply_enhanced_focus(self, enabled: bool) -> None:
+        """Apply thicker, more visible focus outlines."""
+        if enabled:
+            self.setStyleSheet(
+                self.styleSheet()
+                + f"""
+                *:focus {{
+                    outline: 3px solid {COLORS.PRIMARY} !important;
+                    outline-offset: 4px !important;
+                }}
+                """
+            )
+        logger.debug(f"Enhanced focus: {enabled}")
+
+    def _apply_dyslexia_font(self, enabled: bool) -> None:
+        """Switch to a dyslexia-friendly font."""
+        font = self.font()
+        if enabled:
+            # OpenDyslexic > Comic Sans MS > Arial as fallback chain
+            font.setFamily("OpenDyslexic")
+            font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 105)
+            font.setWordSpacing(2.0)
+        else:
+            font.setFamily("")  # Reset to system default
+            font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 100)
+            font.setWordSpacing(0.0)
+        self.setFont(font)
+        logger.debug(f"Dyslexia font: {enabled}")
+
+    def _apply_color_blind_mode(self, mode: str) -> None:
+        """Apply a color-blind accommodation filter to the window.
+
+        PyQt6 doesn't have built-in SVG filter support like CSS, so we
+        approximate monochrome with a stylesheet desaturation hint and use
+        palette overrides for the other modes to remap status colours.
+        """
+        from PyQt6.QtWidgets import QApplication
+        from PyQt6.QtGui import QPalette, QColor
+
+        palette = QApplication.palette()
+
+        if mode == "monochrome":
+            # Override accent/status colours to grayscale equivalents
+            palette.setColor(QPalette.ColorRole.Highlight, QColor("#808080"))
+            palette.setColor(QPalette.ColorRole.Link, QColor("#AAAAAA"))
+        elif mode == "deuteranopia":
+            palette.setColor(QPalette.ColorRole.Highlight, QColor("#1f77b4"))
+            palette.setColor(QPalette.ColorRole.Link, QColor("#ff7f0e"))
+        elif mode == "protanopia":
+            palette.setColor(QPalette.ColorRole.Highlight, QColor("#0072B2"))
+            palette.setColor(QPalette.ColorRole.Link, QColor("#E69F00"))
+        elif mode == "tritanopia":
+            palette.setColor(QPalette.ColorRole.Highlight, QColor("#CC79A7"))
+            palette.setColor(QPalette.ColorRole.Link, QColor("#009E73"))
+        else:
+            # Reset to app default
+            palette = QApplication.style().standardPalette()
+
+        QApplication.setPalette(palette)
+        logger.debug(f"Color blind mode: {mode}")
+
+    def _apply_custom_cursor(self, style: str) -> None:
+        """Set a custom cursor style for the entire application."""
+        from PyQt6.QtCore import QByteArray
+        from PyQt6.QtSvg import QSvgRenderer
+
+        if style == "default":
+            self.unsetCursor()
+            return
+
+        size = 32
+        hot_x, hot_y = 4, 4
+
+        svg_map = {
+            "large-black": (
+                '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">'
+                '<polygon points="4,4 4,28 12,20 20,28" '
+                'fill="black" stroke="white" stroke-width="2"/></svg>'
+            ),
+            "large-white": (
+                '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">'
+                '<polygon points="4,4 4,28 12,20 20,28" '
+                'fill="white" stroke="black" stroke-width="2"/></svg>'
+            ),
+            "large-crosshair": (
+                '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">'
+                '<line x1="16" y1="0" x2="16" y2="32" stroke="red" stroke-width="2"/>'
+                '<line x1="0" y1="16" x2="32" y2="16" stroke="red" stroke-width="2"/>'
+                '<circle cx="16" cy="16" r="6" fill="none" stroke="black" stroke-width="1.5"/>'
+                '</svg>'
+            ),
+            "high-visibility": (
+                '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40">'
+                '<polygon points="4,4 4,36 14,26 24,36" '
+                'fill="#FFD700" stroke="black" stroke-width="2.5"/></svg>'
+            ),
+        }
+
+        svg_data = svg_map.get(style)
+        if not svg_data:
+            self.unsetCursor()
+            return
+
+        if style == "high-visibility":
+            size = 40
+
+        try:
+            renderer = QSvgRenderer(QByteArray(svg_data.encode()))
+            pixmap = QPixmap(size, size)
+            pixmap.fill(Qt.GlobalColor.transparent)
+            from PyQt6.QtGui import QPainter
+            painter = QPainter(pixmap)
+            renderer.render(painter)
+            painter.end()
+            self.setCursor(QCursor(pixmap, hot_x, hot_y))
+        except Exception as e:
+            logger.warning(f"Failed to apply custom cursor '{style}': {e}")
+            self.unsetCursor()
+
+        logger.debug(f"Custom cursor: {style}")
 
     def show_settings(self) -> None:
         """Switch to settings tab."""

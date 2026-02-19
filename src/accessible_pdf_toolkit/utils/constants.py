@@ -104,6 +104,24 @@ class ComplianceStatus(Enum):
     NON_COMPLIANT = auto()
 
 
+class ColorBlindMode(Enum):
+    """Color blindness simulation / accommodation modes."""
+    NONE = "none"
+    DEUTERANOPIA = "deuteranopia"   # Green-blind
+    PROTANOPIA = "protanopia"       # Red-blind
+    TRITANOPIA = "tritanopia"       # Blue-blind
+    MONOCHROME = "monochrome"       # Grayscale
+
+
+class CustomCursorStyle(Enum):
+    """Custom cursor style options for accessibility."""
+    DEFAULT = "default"
+    LARGE_BLACK = "large-black"
+    LARGE_WHITE = "large-white"
+    LARGE_CROSSHAIR = "large-crosshair"
+    HIGH_VISIBILITY = "high-visibility"
+
+
 class AIBackend(Enum):
     """Supported AI backends."""
     OLLAMA = "ollama"
@@ -298,6 +316,12 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "ui": {
         "theme": "system",
         "high_contrast": False,
+        "reduced_motion": False,
+        "large_text_mode": False,
+        "enhanced_focus": False,
+        "dyslexia_font": False,
+        "color_blind_mode": ColorBlindMode.NONE.value,
+        "custom_cursor": CustomCursorStyle.DEFAULT.value,
         "font_size": 12,
         "show_line_numbers": True,
         "auto_preview": True,
