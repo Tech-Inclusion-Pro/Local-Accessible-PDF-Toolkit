@@ -298,7 +298,7 @@ This app checks your PDFs against WCAG 2.1/2.2 Level AA:
 
 ## Credits
 
-Made with ❤️ by **Rocco Catrone** of **Tech Inclusion Pro, LLC**
+Made with ❤️ by **Rocco Catrone** 
 
 Helping make the digital world accessible to everyone!
 
