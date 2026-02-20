@@ -576,17 +576,6 @@ class MainWindow(QMainWindow):
                 color: white;
             }}
 
-            QCheckBox {{
-                color: {COLORS.TEXT_PRIMARY};
-                font-size: 12pt;
-                spacing: 8px;
-            }}
-
-            QCheckBox::indicator {{
-                width: 18px;
-                height: 18px;
-            }}
-
             QGroupBox {{
                 color: {COLORS.TEXT_PRIMARY};
                 border: 1px solid {COLORS.BORDER};

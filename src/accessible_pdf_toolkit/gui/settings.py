@@ -14,14 +14,14 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QComboBox,
     QSpinBox,
-    QCheckBox,
     QGroupBox,
     QScrollArea,
     QFrame,
     QMessageBox,
     QTabWidget,
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, QSize, pyqtSignal, pyqtProperty, QPropertyAnimation, QEasingCurve
+from PyQt6.QtGui import QPainter, QColor, QPen
 
 from ..utils.constants import (
     COLORS,
@@ -41,6 +41,131 @@ from ..database.queries import DatabaseQueries
 from .widgets.ai_config_panel import AIConfigPanel
 
 logger = get_logger(__name__)
+
+
+class ToggleSwitch(QWidget):
+    """Custom toggle switch widget replacing square checkboxes."""
+
+    toggled = pyqtSignal(bool)
+
+    def __init__(self, text="", parent=None):
+        super().__init__(parent)
+        self._checked = False
+        self._thumb_x = 0.0
+        self._text = text
+
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        self.setAccessibleName(text)
+
+        self._anim = QPropertyAnimation(self, b"thumb_position")
+        self._anim.setDuration(150)
+        self._anim.setEasingCurve(QEasingCurve.Type.InOutCubic)
+
+    # -- Qt animated property --
+    def _get_thumb_pos(self):
+        return self._thumb_x
+
+    def _set_thumb_pos(self, v):
+        self._thumb_x = v
+        self.update()
+
+    thumb_position = pyqtProperty(float, _get_thumb_pos, _set_thumb_pos)
+
+    # -- Public API (compatible with QCheckBox) --
+    def isChecked(self):
+        return self._checked
+
+    def setChecked(self, checked):
+        if self._checked == checked:
+            return
+        self._checked = checked
+        self._anim.stop()
+        self._thumb_x = 1.0 if checked else 0.0
+        self.update()
+        self.toggled.emit(checked)
+
+    def toggle(self):
+        self._checked = not self._checked
+        self._anim.stop()
+        self._anim.setStartValue(self._thumb_x)
+        self._anim.setEndValue(1.0 if self._checked else 0.0)
+        self._anim.start()
+        self.toggled.emit(self._checked)
+
+    # -- Events --
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.toggle()
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Space, Qt.Key.Key_Return):
+            self.toggle()
+        else:
+            super().keyPressEvent(event)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        track_w, track_h = 44, 24
+        track_y = (self.height() - track_h) // 2
+        radius = track_h // 2
+
+        # Interpolate track color between off and on
+        off_c = QColor(COLORS.BORDER)
+        on_c = QColor(COLORS.PRIMARY)
+        t = self._thumb_x
+        track_color = QColor(
+            int(off_c.red() + (on_c.red() - off_c.red()) * t),
+            int(off_c.green() + (on_c.green() - off_c.green()) * t),
+            int(off_c.blue() + (on_c.blue() - off_c.blue()) * t),
+        )
+
+        painter.setBrush(track_color)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawRoundedRect(0, track_y, track_w, track_h, radius, radius)
+
+        # Thumb
+        thumb_d = track_h - 4
+        thumb_y = track_y + 2
+        thumb_travel = track_w - thumb_d - 4
+        thumb_x = int(2 + thumb_travel * self._thumb_x)
+
+        # Shadow
+        painter.setBrush(QColor(0, 0, 0, 30))
+        painter.drawEllipse(thumb_x + 1, thumb_y + 1, thumb_d, thumb_d)
+        # Knob
+        painter.setBrush(QColor("white"))
+        painter.drawEllipse(thumb_x, thumb_y, thumb_d, thumb_d)
+
+        # Focus ring
+        if self.hasFocus():
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(QPen(QColor(COLORS.PRIMARY), 2))
+            painter.drawRoundedRect(
+                -1, track_y - 1, track_w + 2, track_h + 2, radius + 1, radius + 1
+            )
+
+        # Label text
+        if self._text:
+            painter.setPen(QColor(COLORS.TEXT_PRIMARY))
+            text_rect = self.rect().adjusted(track_w + 10, 0, 0, 0)
+            painter.drawText(
+                text_rect,
+                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+                self._text,
+            )
+
+        painter.end()
+
+    def sizeHint(self):
+        fm = self.fontMetrics()
+        text_w = fm.horizontalAdvance(self._text) if self._text else 0
+        return QSize(44 + 10 + text_w + 10, max(30, fm.height() + 10))
+
+    def minimumSizeHint(self):
+        return QSize(44, 24)
 
 
 class SettingsPanel(QWidget):
@@ -400,25 +525,6 @@ class SettingsPanel(QWidget):
                 color: {COLORS.INPUT_TEXT};
                 selection-background-color: {COLORS.PRIMARY};
             }}
-            QCheckBox {{
-                color: {COLORS.TEXT_PRIMARY};
-                font-size: 12pt;
-                spacing: 8px;
-            }}
-            QCheckBox::indicator {{
-                width: 18px;
-                height: 18px;
-            }}
-            QCheckBox::indicator:checked {{
-                background-color: {COLORS.PRIMARY};
-                border: 2px solid {COLORS.PRIMARY};
-                border-radius: 3px;
-            }}
-            QCheckBox::indicator:unchecked {{
-                background-color: {COLORS.INPUT_BG};
-                border: 2px solid {COLORS.BORDER};
-                border-radius: 3px;
-            }}
         """)
         layout = QVBoxLayout(container)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -452,7 +558,7 @@ class SettingsPanel(QWidget):
         ocr_group = QGroupBox("OCR Settings")
         ocr_layout = QVBoxLayout(ocr_group)
 
-        self.auto_ocr_cb = QCheckBox("Automatically run OCR on scanned documents")
+        self.auto_ocr_cb = ToggleSwitch("Automatically run OCR on scanned documents")
         self.auto_ocr_cb.setChecked(True)
         ocr_layout.addWidget(self.auto_ocr_cb)
 
@@ -478,7 +584,7 @@ class SettingsPanel(QWidget):
         file_group = QGroupBox("File Handling")
         file_layout = QVBoxLayout(file_group)
 
-        self.preserve_original_cb = QCheckBox("Preserve original files (create copies)")
+        self.preserve_original_cb = ToggleSwitch("Preserve original files (create copies)")
         self.preserve_original_cb.setChecked(True)
         file_layout.addWidget(self.preserve_original_cb)
 
@@ -526,25 +632,6 @@ class SettingsPanel(QWidget):
                 color: {COLORS.INPUT_TEXT};
                 selection-background-color: {COLORS.PRIMARY};
             }}
-            QCheckBox {{
-                color: {COLORS.TEXT_PRIMARY};
-                font-size: 12pt;
-                spacing: 8px;
-            }}
-            QCheckBox::indicator {{
-                width: 18px;
-                height: 18px;
-            }}
-            QCheckBox::indicator:checked {{
-                background-color: {COLORS.PRIMARY};
-                border: 2px solid {COLORS.PRIMARY};
-                border-radius: 3px;
-            }}
-            QCheckBox::indicator:unchecked {{
-                background-color: {COLORS.INPUT_BG};
-                border: 2px solid {COLORS.BORDER};
-                border-radius: 3px;
-            }}
         """
         container.setStyleSheet(base_style)
         layout = QVBoxLayout(container)
@@ -557,7 +644,7 @@ class SettingsPanel(QWidget):
         display_layout.setSpacing(12)
 
         # High Contrast Mode
-        self.high_contrast_cb = QCheckBox("High Contrast Mode")
+        self.high_contrast_cb = ToggleSwitch("High Contrast Mode")
         self.high_contrast_cb.setAccessibleName("High contrast mode")
         self.high_contrast_cb.setToolTip("Increase contrast for better visibility")
         display_layout.addWidget(self.high_contrast_cb)
@@ -566,7 +653,7 @@ class SettingsPanel(QWidget):
         display_layout.addWidget(hc_desc)
 
         # Reduced Motion
-        self.reduced_motion_cb = QCheckBox("Reduced Motion")
+        self.reduced_motion_cb = ToggleSwitch("Reduced Motion")
         self.reduced_motion_cb.setAccessibleName("Reduced motion")
         self.reduced_motion_cb.setToolTip("Disable animations throughout the application")
         display_layout.addWidget(self.reduced_motion_cb)
@@ -575,7 +662,7 @@ class SettingsPanel(QWidget):
         display_layout.addWidget(rm_desc)
 
         # Large Text Mode
-        self.large_text_cb = QCheckBox("Large Text Mode")
+        self.large_text_cb = ToggleSwitch("Large Text Mode")
         self.large_text_cb.setAccessibleName("Large text mode")
         self.large_text_cb.setToolTip("Increase font size by 25%")
         display_layout.addWidget(self.large_text_cb)
@@ -584,7 +671,7 @@ class SettingsPanel(QWidget):
         display_layout.addWidget(lt_desc)
 
         # Enhanced Focus Indicators
-        self.enhanced_focus_cb = QCheckBox("Enhanced Focus Indicators")
+        self.enhanced_focus_cb = ToggleSwitch("Enhanced Focus Indicators")
         self.enhanced_focus_cb.setAccessibleName("Enhanced focus indicators")
         self.enhanced_focus_cb.setToolTip("Larger, more visible focus outlines")
         display_layout.addWidget(self.enhanced_focus_cb)
@@ -593,7 +680,7 @@ class SettingsPanel(QWidget):
         display_layout.addWidget(ef_desc)
 
         # Dyslexia-Friendly Font
-        self.dyslexia_font_cb = QCheckBox("Dyslexia-Friendly Font")
+        self.dyslexia_font_cb = ToggleSwitch("Dyslexia-Friendly Font")
         self.dyslexia_font_cb.setAccessibleName("Dyslexia-friendly font")
         self.dyslexia_font_cb.setToolTip("Use OpenDyslexic font style")
         display_layout.addWidget(self.dyslexia_font_cb)
@@ -670,31 +757,40 @@ class SettingsPanel(QWidget):
         checks_group = QGroupBox("Validation Checks")
         checks_layout = QVBoxLayout(checks_group)
 
-        self.check_contrast_cb = QCheckBox("Check color contrast")
+        self.check_contrast_cb = ToggleSwitch("Check color contrast")
         self.check_contrast_cb.setChecked(True)
         checks_layout.addWidget(self.check_contrast_cb)
 
-        self.check_headings_cb = QCheckBox("Check heading structure")
+        self.check_headings_cb = ToggleSwitch("Check heading structure")
         self.check_headings_cb.setChecked(True)
         checks_layout.addWidget(self.check_headings_cb)
 
-        self.check_alt_text_cb = QCheckBox("Check image alt text")
+        self.check_alt_text_cb = ToggleSwitch("Check image alt text")
         self.check_alt_text_cb.setChecked(True)
         checks_layout.addWidget(self.check_alt_text_cb)
 
-        self.check_tables_cb = QCheckBox("Check table accessibility")
+        self.check_tables_cb = ToggleSwitch("Check table accessibility")
         self.check_tables_cb.setChecked(True)
         checks_layout.addWidget(self.check_tables_cb)
 
-        self.check_links_cb = QCheckBox("Check link text")
+        self.check_links_cb = ToggleSwitch("Check link text")
         self.check_links_cb.setChecked(True)
         checks_layout.addWidget(self.check_links_cb)
 
-        self.check_reading_order_cb = QCheckBox("Check reading order")
+        self.check_reading_order_cb = ToggleSwitch("Check reading order")
         self.check_reading_order_cb.setChecked(True)
         checks_layout.addWidget(self.check_reading_order_cb)
 
         layout.addWidget(checks_group)
+
+        # Connect remaining accessibility options to live preview
+        self.wcag_level.currentIndexChanged.connect(self._emit_preview)
+        self.check_contrast_cb.toggled.connect(self._emit_preview)
+        self.check_headings_cb.toggled.connect(self._emit_preview)
+        self.check_alt_text_cb.toggled.connect(self._emit_preview)
+        self.check_tables_cb.toggled.connect(self._emit_preview)
+        self.check_links_cb.toggled.connect(self._emit_preview)
+        self.check_reading_order_cb.toggled.connect(self._emit_preview)
 
         layout.addStretch()
         return self._create_scroll_widget(container)
@@ -746,25 +842,6 @@ class SettingsPanel(QWidget):
                 color: {COLORS.INPUT_TEXT};
                 selection-background-color: {COLORS.PRIMARY};
             }}
-            QCheckBox {{
-                color: {COLORS.TEXT_PRIMARY};
-                font-size: 12pt;
-                spacing: 8px;
-            }}
-            QCheckBox::indicator {{
-                width: 18px;
-                height: 18px;
-            }}
-            QCheckBox::indicator:checked {{
-                background-color: {COLORS.PRIMARY};
-                border: 2px solid {COLORS.PRIMARY};
-                border-radius: 3px;
-            }}
-            QCheckBox::indicator:unchecked {{
-                background-color: {COLORS.INPUT_BG};
-                border: 2px solid {COLORS.BORDER};
-                border-radius: 3px;
-            }}
         """)
         layout = QVBoxLayout(container)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -813,11 +890,11 @@ class SettingsPanel(QWidget):
         editor_group = QGroupBox("Editor Settings")
         editor_layout = QVBoxLayout(editor_group)
 
-        self.show_line_numbers_cb = QCheckBox("Show line numbers")
+        self.show_line_numbers_cb = ToggleSwitch("Show line numbers")
         self.show_line_numbers_cb.setChecked(True)
         editor_layout.addWidget(self.show_line_numbers_cb)
 
-        self.auto_preview_cb = QCheckBox("Auto-update preview")
+        self.auto_preview_cb = ToggleSwitch("Auto-update preview")
         self.auto_preview_cb.setChecked(True)
         editor_layout.addWidget(self.auto_preview_cb)
 
@@ -871,25 +948,6 @@ class SettingsPanel(QWidget):
                 padding: 8px;
                 font-size: 12pt;
             }}
-            QCheckBox {{
-                color: {COLORS.TEXT_PRIMARY};
-                font-size: 12pt;
-                spacing: 8px;
-            }}
-            QCheckBox::indicator {{
-                width: 18px;
-                height: 18px;
-            }}
-            QCheckBox::indicator:checked {{
-                background-color: {COLORS.PRIMARY};
-                border: 2px solid {COLORS.PRIMARY};
-                border-radius: 3px;
-            }}
-            QCheckBox::indicator:unchecked {{
-                background-color: {COLORS.INPUT_BG};
-                border: 2px solid {COLORS.BORDER};
-                border-radius: 3px;
-            }}
             QPushButton {{
                 background-color: {COLORS.BACKGROUND_ALT};
                 color: {COLORS.TEXT_PRIMARY};
@@ -911,7 +969,7 @@ class SettingsPanel(QWidget):
         encryption_group = QGroupBox("File Encryption")
         encryption_layout = QVBoxLayout(encryption_group)
 
-        self.encrypt_files_cb = QCheckBox("Encrypt sensitive files at rest")
+        self.encrypt_files_cb = ToggleSwitch("Encrypt sensitive files at rest")
         self.encrypt_files_cb.setChecked(True)
         encryption_layout.addWidget(self.encrypt_files_cb)
 
@@ -943,7 +1001,7 @@ class SettingsPanel(QWidget):
 
         session_layout.addLayout(timeout_row)
 
-        self.require_password_cb = QCheckBox("Require password to access encrypted files")
+        self.require_password_cb = ToggleSwitch("Require password to access encrypted files")
         session_layout.addWidget(self.require_password_cb)
 
         layout.addWidget(session_group)
@@ -1111,7 +1169,16 @@ class SettingsPanel(QWidget):
                 "dyslexia_font": self.dyslexia_font_cb.isChecked(),
                 "color_blind_mode": self.color_blind_combo.currentData(),
                 "custom_cursor": self.custom_cursor_combo.currentData(),
-            }
+            },
+            "accessibility": {
+                "wcag_level": self.wcag_level.currentData(),
+                "check_contrast": self.check_contrast_cb.isChecked(),
+                "check_headings": self.check_headings_cb.isChecked(),
+                "check_alt_text": self.check_alt_text_cb.isChecked(),
+                "check_tables": self.check_tables_cb.isChecked(),
+                "check_links": self.check_links_cb.isChecked(),
+                "check_reading_order": self.check_reading_order_cb.isChecked(),
+            },
         }
         self.preview_requested.emit(preview_config)
 
