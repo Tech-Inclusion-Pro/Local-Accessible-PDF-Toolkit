@@ -45,6 +45,8 @@ class RecentFileCard(QFrame):
         self._file_name = file_info.get("name", "Unknown")
         self._last_opened = file_info.get("last_opened", "")
         self._thumbnail = file_info.get("thumbnail")
+        self._compliance_score = file_info.get("compliance_score")
+        self._compliance_status = file_info.get("compliance_status", "not_checked")
 
         self._setup_ui()
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -94,6 +96,33 @@ class RecentFileCard(QFrame):
             }}
         """)
         thumb_layout.addWidget(icon_label)
+
+        # Compliance badge (overlaid at bottom of thumbnail)
+        if self._compliance_score is not None:
+            score = self._compliance_score
+            if score >= 90:
+                badge_color = COLORS.SUCCESS
+                badge_text = f"{score:.0f}%"
+            elif score >= 70:
+                badge_color = COLORS.WARNING
+                badge_text = f"{score:.0f}%"
+            else:
+                badge_color = COLORS.ERROR
+                badge_text = f"{score:.0f}%"
+
+            badge = QLabel(badge_text)
+            badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            badge.setStyleSheet(f"""
+                QLabel {{
+                    background-color: {badge_color};
+                    color: white;
+                    font-size: 10pt;
+                    font-weight: bold;
+                    border-radius: 3px;
+                    padding: 2px 8px;
+                }}
+            """)
+            thumb_layout.addWidget(badge, alignment=Qt.AlignmentFlag.AlignCenter)
 
         layout.addWidget(thumbnail_frame)
 
@@ -532,6 +561,28 @@ class DashboardPanel(QWidget):
             self._recent_files = []
             self._save_recent_files()
             self._update_recent_files_ui()
+
+    def update_file_compliance(self, file_path: str, score: float, is_compliant: bool) -> None:
+        """
+        Update compliance info for a file in the recent files list.
+
+        Args:
+            file_path: Path to the PDF file
+            score: Compliance score (0-100)
+            is_compliant: Whether the file passed validation
+        """
+        path_str = str(Path(file_path))
+        for entry in self._recent_files:
+            if entry.get("path") == path_str:
+                entry["compliance_score"] = score
+                entry["compliance_status"] = "compliant" if is_compliant else "non_compliant"
+                break
+        else:
+            # File not in recent list yet — nothing to update
+            return
+
+        self._save_recent_files()
+        self._update_recent_files_ui()
 
     def refresh(self) -> None:
         """Refresh the dashboard."""

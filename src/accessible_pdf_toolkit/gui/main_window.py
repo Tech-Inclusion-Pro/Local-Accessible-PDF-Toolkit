@@ -36,10 +36,13 @@ from ..utils.logger import get_logger
 from ..database.models import User, init_db
 from ..core.pdf_handler import PDFHandler
 from ..core.html_generator import HTMLGenerator, HTMLOptions
+from ..core.report_generator import ComplianceReportGenerator
 from .pdf_viewer import PDFViewerPanel
 from .settings import SettingsPanel, ToggleSwitch
 from .dashboard_panel import DashboardPanel
 from .dialogs.batch_dialog import BatchDialog
+from .dialogs.guided_fix_wizard import GuidedFixWizard
+from .dialogs.show_me_walkthrough import ShowMeWalkthroughDialog, WALKTHROUGHS
 
 logger = get_logger(__name__)
 
@@ -164,6 +167,9 @@ class MainWindow(QMainWindow):
             lambda path: self.dashboard_tab.add_recent_file(path)
         )
 
+        # Persist compliance results to dashboard whenever validation completes
+        self.pdf_viewer_tab.validation_complete.connect(self._persist_compliance_to_dashboard)
+
         # Connect settings changes to apply accessibility preferences
         self.settings_tab.settings_changed.connect(self._on_settings_changed)
         # Connect live preview (same handler, triggered on toggle/change)
@@ -173,6 +179,9 @@ class MainWindow(QMainWindow):
         self.tab_widget.addTab(self.dashboard_tab, "Dashboard")
         self.tab_widget.addTab(self.pdf_viewer_tab, "PDF Viewer")
         self.tab_widget.addTab(self.settings_tab, "Settings")
+
+        # Refresh dashboard when switching back to it
+        self.tab_widget.currentChanged.connect(self._on_tab_changed)
 
         main_layout.addWidget(self.tab_widget)
 
@@ -281,6 +290,12 @@ class MainWindow(QMainWindow):
         batch_action = QAction("&Batch Process...", self)
         batch_action.triggered.connect(self.show_batch_dialog)
         tools_menu.addAction(batch_action)
+
+        tools_menu.addSeparator()
+
+        report_action = QAction("Generate Compliance &Report...", self)
+        report_action.triggered.connect(self.generate_compliance_report)
+        tools_menu.addAction(report_action)
 
         # Help menu
         help_menu = menubar.addMenu("&Help")
@@ -834,8 +849,8 @@ class MainWindow(QMainWindow):
             5000,
         )
 
-        # Show result dialog
-        if result.is_compliant:
+        # Show result dialog with "Show Me" option when there are issues
+        if result.is_compliant and not result.issues:
             QMessageBox.information(
                 self,
                 "WCAG Validation",
@@ -843,17 +858,93 @@ class MainWindow(QMainWindow):
                 f"Score: {result.score:.0f}%\n"
                 f"Warnings: {result.summary['warnings']}",
             )
+        elif result.issues:
+            msg = QMessageBox(self)
+            msg.setWindowTitle("WCAG Validation")
+            if result.is_compliant:
+                msg.setIcon(QMessageBox.Icon.Information)
+                msg.setText(
+                    f"Document is WCAG {result.level.value} compliant!\n\n"
+                    f"Score: {result.score:.0f}%\n"
+                    f"Warnings: {result.summary['warnings']}\n\n"
+                    f"There are {len(result.issues)} items to review."
+                )
+            else:
+                msg.setIcon(QMessageBox.Icon.Warning)
+                msg.setText(
+                    f"Document is NOT WCAG {result.level.value} compliant.\n\n"
+                    f"Score: {result.score:.0f}%\n"
+                    f"Errors: {result.summary['errors']}\n"
+                    f"Warnings: {result.summary['warnings']}\n\n"
+                    f"There are {len(result.issues)} issues to address."
+                )
+            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+            auto_fix_btn = msg.addButton("Auto-Fix", QMessageBox.ButtonRole.ActionRole)
+            show_me_btn = msg.addButton("Show Me", QMessageBox.ButtonRole.ActionRole)
+            msg.exec()
+
+            clicked = msg.clickedButton()
+            if clicked == auto_fix_btn:
+                new_result = self.pdf_viewer_tab.auto_fix_wcag()
+                if new_result:
+                    result = new_result
+                    # Update status bar with new score
+                    if result.is_compliant:
+                        self.compliance_status.setText(
+                            f"WCAG {result.level.value}: Compliant ({result.score:.0f}%)"
+                        )
+                        self.compliance_status.setStyleSheet(f"color: #22C55E; font-size: 12pt;")
+                    else:
+                        self.compliance_status.setText(
+                            f"WCAG {result.level.value}: Non-compliant ({result.score:.0f}%)"
+                        )
+                        self.compliance_status.setStyleSheet(f"color: #EF4444; font-size: 12pt;")
+            elif clicked == show_me_btn:
+                wizard = GuidedFixWizard(result.issues, parent=self)
+                if self.pdf_viewer_tab.current_document:
+                    viewer = self.pdf_viewer_tab._viewer
+                    wizard.navigate_to_page.connect(viewer.go_to_page)
+                wizard.inline_fix_applied.connect(self._on_wizard_inline_fix)
+                wizard.open_walkthrough.connect(self._open_walkthrough_from_wizard)
+                wizard.exec()
+
+                # Re-validate after wizard closes to update the score
+                new_result = self.pdf_viewer_tab.run_validation()
+                if new_result:
+                    result = new_result
+                    # Save and persist so changes survive reopening
+                    self.pdf_viewer_tab._save_and_persist(new_result)
+                    if result.is_compliant:
+                        self.compliance_status.setText(
+                            f"WCAG {result.level.value}: Compliant ({result.score:.0f}%)"
+                        )
+                        self.compliance_status.setStyleSheet(f"color: #22C55E; font-size: 12pt;")
+                    else:
+                        self.compliance_status.setText(
+                            f"WCAG {result.level.value}: Non-compliant ({result.score:.0f}%)"
+                        )
+                        self.compliance_status.setStyleSheet(f"color: #EF4444; font-size: 12pt;")
         else:
-            QMessageBox.warning(
+            QMessageBox.information(
                 self,
                 "WCAG Validation",
-                f"Document is NOT WCAG {result.level.value} compliant.\n\n"
-                f"Score: {result.score:.0f}%\n"
-                f"Errors: {result.summary['errors']}\n"
-                f"Warnings: {result.summary['warnings']}",
+                f"Document is WCAG {result.level.value} compliant!\n\n"
+                f"Score: {result.score:.0f}%",
             )
 
         logger.info(f"WCAG validation complete: score={result.score}")
+
+        # Persist to dashboard
+        self._persist_compliance_to_dashboard(result)
+
+    def _persist_compliance_to_dashboard(self, result) -> None:
+        """Save compliance score to the dashboard's recent files list."""
+        if self.current_file:
+            self.dashboard_tab.update_file_compliance(
+                str(self.current_file),
+                result.score,
+                result.is_compliant,
+            )
 
     def get_ai_suggestions(self) -> None:
         """Get AI-powered suggestions."""
@@ -875,6 +966,79 @@ class MainWindow(QMainWindow):
     def show_batch_dialog(self) -> None:
         """Show batch processing dialog."""
         dialog = BatchDialog(self)
+        dialog.exec()
+
+    def generate_compliance_report(self) -> None:
+        """Generate an HTML compliance report for the current document."""
+        if not self.current_file:
+            QMessageBox.information(self, "No File", "Please open a PDF file first")
+            return
+
+        # Get current validation result from the viewer
+        result = self.pdf_viewer_tab.run_validation()
+        if result is None:
+            QMessageBox.warning(self, "Error", "Could not validate the document. Please load it first.")
+            return
+
+        # Ask where to save
+        default_path = self.current_file.with_name(
+            self.current_file.stem + "_compliance_report.html"
+        )
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Compliance Report",
+            str(default_path),
+            "HTML Files (*.html)",
+        )
+
+        if not file_path:
+            return
+
+        generator = ComplianceReportGenerator(
+            document_name=self.current_file.name,
+            result=result,
+        )
+
+        if generator.generate_report(Path(file_path)):
+            self.status_bar.showMessage(f"Report saved: {Path(file_path).name}", 5000)
+            QMessageBox.information(
+                self,
+                "Report Generated",
+                f"Compliance report saved to:\n{file_path}",
+            )
+        else:
+            QMessageBox.warning(self, "Error", "Failed to generate compliance report.")
+
+    def _on_wizard_inline_fix(self, issue, fix_value: str) -> None:
+        """Handle an inline fix from the Guided Fix Wizard (main window context)."""
+        handler = self.pdf_viewer_tab._handler
+        document = self.pdf_viewer_tab.current_document
+        if not handler or not document:
+            return
+
+        criterion = issue.criterion
+        logger.info(f"Wizard inline fix for [{criterion}]: '{fix_value}'")
+
+        if criterion == "2.4.2":
+            handler.set_title(fix_value)
+        elif criterion == "3.1.1":
+            handler.set_language(fix_value)
+        elif criterion in ("1.3.1", "1.3.2"):
+            if not document.is_tagged or not document.has_structure:
+                handler.ensure_tagged()
+        elif criterion == "1.1.1":
+            page_num = issue.page or 1
+            handler.set_image_alt_text(page_num, 0, fix_value)
+
+        # Save to disk so changes persist
+        self.pdf_viewer_tab._save_and_persist()
+
+    def _open_walkthrough_from_wizard(self, walkthrough_id: str) -> None:
+        """Launch a Show Me walkthrough dialog from the main window."""
+        wt = WALKTHROUGHS.get(walkthrough_id)
+        if not wt:
+            return
+        dialog = ShowMeWalkthroughDialog(wt, parent=self)
         dialog.exec()
 
     # ==================== View Actions ====================
@@ -1286,6 +1450,11 @@ class MainWindow(QMainWindow):
         msg.exec()
 
     # ==================== Event Handlers ====================
+
+    def _on_tab_changed(self, index: int) -> None:
+        """Refresh dashboard when switching back to it."""
+        if index == 0:  # Dashboard tab
+            self.dashboard_tab.refresh()
 
     def resizeEvent(self, event) -> None:
         """Keep cursor trail overlay sized to window."""
