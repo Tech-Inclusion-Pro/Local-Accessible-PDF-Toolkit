@@ -48,6 +48,11 @@ class ToggleSwitch(QWidget):
 
     toggled = pyqtSignal(bool)
 
+    # Class-level flags set by MainWindow accessibility methods
+    reduced_motion = False
+    on_color = None       # QColor override for color-blind modes
+    enhanced_focus = False
+
     def __init__(self, text="", parent=None):
         super().__init__(parent)
         self._checked = False
@@ -88,9 +93,13 @@ class ToggleSwitch(QWidget):
     def toggle(self):
         self._checked = not self._checked
         self._anim.stop()
-        self._anim.setStartValue(self._thumb_x)
-        self._anim.setEndValue(1.0 if self._checked else 0.0)
-        self._anim.start()
+        if ToggleSwitch.reduced_motion:
+            self._thumb_x = 1.0 if self._checked else 0.0
+            self.update()
+        else:
+            self._anim.setStartValue(self._thumb_x)
+            self._anim.setEndValue(1.0 if self._checked else 0.0)
+            self._anim.start()
         self.toggled.emit(self._checked)
 
     # -- Events --
@@ -114,7 +123,7 @@ class ToggleSwitch(QWidget):
 
         # Interpolate track color between off and on
         off_c = QColor(COLORS.BORDER)
-        on_c = QColor(COLORS.PRIMARY)
+        on_c = ToggleSwitch.on_color if ToggleSwitch.on_color else QColor(COLORS.PRIMARY)
         t = self._thumb_x
         track_color = QColor(
             int(off_c.red() + (on_c.red() - off_c.red()) * t),
@@ -142,7 +151,10 @@ class ToggleSwitch(QWidget):
         # Focus ring
         if self.hasFocus():
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.setPen(QPen(QColor(COLORS.PRIMARY), 2))
+            if ToggleSwitch.enhanced_focus:
+                painter.setPen(QPen(QColor("#FFFF00"), 3))
+            else:
+                painter.setPen(QPen(QColor(COLORS.PRIMARY), 2))
             painter.drawRoundedRect(
                 -1, track_y - 1, track_w + 2, track_h + 2, radius + 1, radius + 1
             )

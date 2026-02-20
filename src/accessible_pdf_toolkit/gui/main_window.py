@@ -37,7 +37,7 @@ from ..database.models import User, init_db
 from ..core.pdf_handler import PDFHandler
 from ..core.html_generator import HTMLGenerator, HTMLOptions
 from .pdf_viewer import PDFViewerPanel
-from .settings import SettingsPanel
+from .settings import SettingsPanel, ToggleSwitch
 from .dashboard_panel import DashboardPanel
 from .dialogs.batch_dialog import BatchDialog
 
@@ -942,41 +942,53 @@ class MainWindow(QMainWindow):
 
     def _apply_reduced_motion(self, enabled: bool) -> None:
         """Disable or enable animations application-wide."""
+        ToggleSwitch.reduced_motion = enabled
         if enabled:
-            # Kill all animations by setting duration to near-zero
-            self.setStyleSheet(
-                self.styleSheet()
-                + "\n* { animation-duration: 0ms; transition-duration: 0ms; }"
-            )
-        # When disabled, _apply_styles restores normal behaviour
+            self.status_bar.showMessage("Reduced Motion enabled — animations disabled", 3000)
         logger.debug(f"Reduced motion: {enabled}")
 
     def _apply_large_text(self, enabled: bool) -> None:
-        """Scale all fonts by 125%."""
-        app = self
-        base = 12  # base point size
+        """Scale all fonts by 125% — updates stylesheet and QApplication font."""
+        import re
+        from PyQt6.QtWidgets import QApplication
+
         if enabled:
-            size = int(base * 1.25)
-        else:
-            size = base
-        # Update the global font
-        font = app.font()
+            # Proportionally scale every font-size in the stylesheet
+            def _scale(m):
+                val = int(m.group(1))
+                unit = m.group(2)
+                return f"font-size: {int(val * 1.25)}{unit}"
+            updated = re.sub(r"font-size:\s*(\d+)(pt|px)", _scale, self.styleSheet())
+            self.setStyleSheet(updated)
+
+        # Update QApplication font so widgets without stylesheet inherit it
+        size = 15 if enabled else 12
+        font = QApplication.instance().font()
         font.setPointSize(size)
-        app.setFont(font)
+        QApplication.instance().setFont(font)
+
         logger.debug(f"Large text mode: {enabled} (font {size}pt)")
 
     def _apply_enhanced_focus(self, enabled: bool) -> None:
-        """Apply thicker, more visible focus outlines."""
+        """Apply thicker, more visible focus indicators using Qt-compatible CSS."""
+        ToggleSwitch.enhanced_focus = enabled
         if enabled:
             self.setStyleSheet(
                 self.styleSheet()
                 + f"""
-                *:focus {{
-                    outline: 3px solid {COLORS.PRIMARY} !important;
-                    outline-offset: 4px !important;
+                QPushButton:focus, QComboBox:focus, QSpinBox:focus,
+                QLineEdit:focus, QListWidget:focus, QTreeWidget:focus,
+                QTableWidget:focus {{
+                    border: 3px solid #FFFF00;
+                }}
+                QTabBar::tab:focus {{
+                    border: 3px solid #FFFF00;
                 }}
                 """
             )
+        # Repaint all toggles so their focus rings update
+        for toggle in self.findChildren(ToggleSwitch):
+            toggle.update()
         logger.debug(f"Enhanced focus: {enabled}")
 
     def _apply_dyslexia_font(self, enabled: bool) -> None:
@@ -995,35 +1007,43 @@ class MainWindow(QMainWindow):
         logger.debug(f"Dyslexia font: {enabled}")
 
     def _apply_color_blind_mode(self, mode: str) -> None:
-        """Apply a color-blind accommodation filter to the window.
+        """Remap the app's accent colours for colour-blind accommodation.
 
-        PyQt6 doesn't have built-in SVG filter support like CSS, so we
-        approximate monochrome with a stylesheet desaturation hint and use
-        palette overrides for the other modes to remap status colours.
+        Overrides the stylesheet's primary/hover colours so the change is
+        immediately visible on tabs, buttons, menus, and toggle switches.
         """
-        from PyQt6.QtWidgets import QApplication
-        from PyQt6.QtGui import QPalette, QColor
+        # (primary, primary_dark, primary_light)
+        _mode_colors = {
+            "deuteranopia": ("#1976D2", "#1565C0", "#42A5F5"),   # Blue
+            "protanopia":   ("#1976D2", "#1565C0", "#42A5F5"),   # Blue
+            "tritanopia":   ("#E91E63", "#C2185B", "#F06292"),   # Pink
+            "monochrome":   ("#9E9E9E", "#757575", "#BDBDBD"),   # Gray
+        }
 
-        palette = QApplication.palette()
-
-        if mode == "monochrome":
-            # Override accent/status colours to grayscale equivalents
-            palette.setColor(QPalette.ColorRole.Highlight, QColor("#808080"))
-            palette.setColor(QPalette.ColorRole.Link, QColor("#AAAAAA"))
-        elif mode == "deuteranopia":
-            palette.setColor(QPalette.ColorRole.Highlight, QColor("#1f77b4"))
-            palette.setColor(QPalette.ColorRole.Link, QColor("#ff7f0e"))
-        elif mode == "protanopia":
-            palette.setColor(QPalette.ColorRole.Highlight, QColor("#0072B2"))
-            palette.setColor(QPalette.ColorRole.Link, QColor("#E69F00"))
-        elif mode == "tritanopia":
-            palette.setColor(QPalette.ColorRole.Highlight, QColor("#CC79A7"))
-            palette.setColor(QPalette.ColorRole.Link, QColor("#009E73"))
+        colors = _mode_colors.get(mode)
+        if colors:
+            primary, dark, light = colors
+            ToggleSwitch.on_color = QColor(primary)
+            self.setStyleSheet(
+                self.styleSheet()
+                + f"""
+                QTabBar::tab:selected {{ background-color: {primary}; }}
+                QTabBar::tab:hover:!selected {{ background-color: {light}; }}
+                QPushButton:hover {{ background-color: {primary}; color: white; }}
+                QToolBar QToolButton:hover {{ background-color: {light}; color: white; }}
+                QMenu::item:selected {{ background-color: {primary}; }}
+                QMenuBar::item:selected {{ background-color: {light}; }}
+                QScrollBar::handle:vertical:hover {{ background-color: {primary}; }}
+                """
+            )
         else:
-            # Reset to app default
-            palette = QApplication.style().standardPalette()
+            # "none" — reset to default
+            ToggleSwitch.on_color = None
 
-        QApplication.setPalette(palette)
+        # Repaint all toggles so they pick up the new on_color
+        for toggle in self.findChildren(ToggleSwitch):
+            toggle.update()
+
         logger.debug(f"Color blind mode: {mode}")
 
     def _apply_custom_cursor(self, style: str) -> None:
