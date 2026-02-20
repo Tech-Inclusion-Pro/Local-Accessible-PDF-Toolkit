@@ -11,7 +11,7 @@ import sys
 
 # Application Info
 APP_NAME = "Accessible PDF Toolkit"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.3.0"
 APP_AUTHOR = "Accessible PDF Toolkit Team"
 
 # Paths
