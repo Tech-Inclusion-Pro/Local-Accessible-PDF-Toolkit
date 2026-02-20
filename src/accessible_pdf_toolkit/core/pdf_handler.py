@@ -501,6 +501,10 @@ class PDFHandler:
             if alt_text and tag_type == TagType.FIGURE:
                 struct_elem["/Alt"] = alt_text
 
+            # Set page reference so the element is associated with the correct page
+            if 1 <= page_num <= len(pike_doc.pages):
+                struct_elem["/Pg"] = pike_doc.pages[page_num - 1].obj
+
             # Add to structure tree
             struct_tree = pike_doc.Root.StructTreeRoot
             if "/K" not in struct_tree:
@@ -565,12 +569,18 @@ class PDFHandler:
         Returns:
             True if successful
         """
-        return self.add_tag(
+        result = self.add_tag(
             page_num=page_num,
             bbox=(0, 0, 0, 0),  # Bbox not critical for structure element
             tag_type=TagType.FIGURE,
             alt_text=alt_text,
         )
+
+        # Refresh the alt_text_map so the validator sees the new alt text
+        if result and self._current_doc:
+            self._current_doc.alt_text_map = self.get_image_alt_texts()
+
+        return result
 
     def save(self, output_path: Optional[Path] = None) -> bool:
         """
@@ -613,6 +623,63 @@ class PDFHandler:
             all_elements,
             key=lambda e: (e.page_number, e.bbox[1], e.bbox[0]),
         )
+
+    def reorder_page_elements(self, page_num: int, new_order: List[int]) -> bool:
+        """
+        Reorder elements on a page in both the in-memory model and the PDF structure tree.
+
+        Args:
+            page_num: Page number (1-indexed)
+            new_order: List of original indices in the desired new order
+                       (e.g. [2, 0, 1, 3] means element originally at index 2 is now first)
+
+        Returns:
+            True on success
+        """
+        if not self._current_doc:
+            return False
+
+        if page_num < 1 or page_num > len(self._current_doc.pages):
+            return False
+
+        page = self._current_doc.pages[page_num - 1]
+
+        # Validate that new_order is a permutation of range(len(elements))
+        if sorted(new_order) != list(range(len(page.elements))):
+            logger.error("reorder_page_elements: new_order is not a valid permutation")
+            return False
+
+        # Reorder in-memory elements
+        page.elements = [page.elements[i] for i in new_order]
+
+        # Reorder structure tree children for this page (best-effort)
+        pike_doc = self._current_doc._pike_doc
+        if pike_doc and "/StructTreeRoot" in pike_doc.Root:
+            try:
+                struct_root = pike_doc.Root.StructTreeRoot
+                if "/K" in struct_root:
+                    k = struct_root.K
+                    if isinstance(k, pikepdf.Array):
+                        # Collect children associated with this page
+                        page_children_indices = []
+                        for i, child in enumerate(k):
+                            if isinstance(child, pikepdf.Dictionary):
+                                child_page = self._get_struct_elem_page(child, pike_doc)
+                                if child_page == page_num:
+                                    page_children_indices.append(i)
+
+                        # Reorder those children if counts match
+                        if len(page_children_indices) == len(new_order):
+                            original_children = [k[i] for i in page_children_indices]
+                            reordered_children = [original_children[i] for i in new_order]
+                            for j, idx in enumerate(page_children_indices):
+                                k[idx] = reordered_children[j]
+            except Exception as e:
+                logger.warning(f"Failed to reorder structure tree: {e}")
+                # In-memory reorder still succeeded
+
+        logger.info(f"Reordered {len(new_order)} elements on page {page_num}")
+        return True
 
     def detect_headings(self) -> List[PDFElement]:
         """
