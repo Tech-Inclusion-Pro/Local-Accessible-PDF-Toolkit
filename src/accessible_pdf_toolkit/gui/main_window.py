@@ -970,20 +970,27 @@ class MainWindow(QMainWindow):
         logger.debug(f"Large text mode: {enabled} (font {size}pt)")
 
     def _apply_enhanced_focus(self, enabled: bool) -> None:
-        """Apply thicker, more visible focus indicators using Qt-compatible CSS."""
+        """Apply thicker, more visible focus indicators.
+
+        Makes an immediately-visible change (brighter borders on all
+        interactive widgets) plus very obvious yellow focus rings.
+        """
         ToggleSwitch.enhanced_focus = enabled
         if enabled:
             self.setStyleSheet(
                 self.styleSheet()
-                + f"""
+                + """
+                QPushButton, QComboBox, QSpinBox, QLineEdit {
+                    border: 2px solid #888888;
+                }
                 QPushButton:focus, QComboBox:focus, QSpinBox:focus,
                 QLineEdit:focus, QListWidget:focus, QTreeWidget:focus,
-                QTableWidget:focus {{
-                    border: 3px solid #FFFF00;
-                }}
-                QTabBar::tab:focus {{
-                    border: 3px solid #FFFF00;
-                }}
+                QTableWidget:focus {
+                    border: 4px solid #FFFF00;
+                }
+                QTabBar::tab:focus {
+                    border: 4px solid #FFFF00;
+                }
                 """
             )
         # Repaint all toggles so their focus rings update
@@ -992,53 +999,129 @@ class MainWindow(QMainWindow):
         logger.debug(f"Enhanced focus: {enabled}")
 
     def _apply_dyslexia_font(self, enabled: bool) -> None:
-        """Switch to a dyslexia-friendly font."""
-        font = self.font()
+        """Switch to a dyslexia-friendly font.
+
+        Uses QFontDatabase to pick the best available dyslexia-friendly font,
+        then applies it via both QApplication.setFont() AND stylesheet
+        font-family so it overrides all styled widgets.
+        """
+        import re
+        from PyQt6.QtWidgets import QApplication
+        from PyQt6.QtGui import QFontDatabase
+
         if enabled:
-            # OpenDyslexic > Comic Sans MS > Arial as fallback chain
-            font.setFamily("OpenDyslexic")
-            font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 105)
-            font.setWordSpacing(2.0)
+            available = QFontDatabase.families()
+            # Preference chain: OpenDyslexic > Comic Sans MS > Arial
+            chosen = None
+            for candidate in ("OpenDyslexic", "Comic Sans MS", "Arial"):
+                if candidate in available:
+                    chosen = candidate
+                    break
+            if not chosen:
+                chosen = "Arial"  # last resort
+
+            # Apply via QApplication so it reaches every widget
+            app_font = QApplication.instance().font()
+            app_font.setFamily(chosen)
+            app_font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 105)
+            app_font.setWordSpacing(2.0)
+            QApplication.instance().setFont(app_font)
+
+            # Inject font-family into stylesheet so styled widgets also pick it up
+            ss = self.styleSheet()
+            # Remove any previous injection
+            ss = re.sub(r'/\* dyslexia-font-start \*/.*?/\* dyslexia-font-end \*/', '', ss, flags=re.DOTALL)
+            ss += f'\n/* dyslexia-font-start */ * {{ font-family: "{chosen}"; }} /* dyslexia-font-end */'
+            self.setStyleSheet(ss)
         else:
-            font.setFamily("")  # Reset to system default
-            font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 100)
-            font.setWordSpacing(0.0)
-        self.setFont(font)
+            # Reset to system default
+            app_font = QApplication.instance().font()
+            app_font.setFamily("")
+            app_font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 100)
+            app_font.setWordSpacing(0.0)
+            QApplication.instance().setFont(app_font)
+
+            # Remove font-family injection from stylesheet
+            ss = self.styleSheet()
+            ss = re.sub(r'/\* dyslexia-font-start \*/.*?/\* dyslexia-font-end \*/', '', ss, flags=re.DOTALL)
+            self.setStyleSheet(ss)
+
         logger.debug(f"Dyslexia font: {enabled}")
 
     def _apply_color_blind_mode(self, mode: str) -> None:
-        """Remap the app's accent colours for colour-blind accommodation.
+        """Remap ALL brand accent colours for colour-blind accommodation.
 
-        Overrides the stylesheet's primary/hover colours so the change is
-        immediately visible on tabs, buttons, menus, and toggle switches.
+        Replaces every occurrence of the brand hex colors in the main window
+        stylesheet AND in all child widget stylesheets so the entire app
+        updates, not just a handful of selectors.
         """
-        # (primary, primary_dark, primary_light)
+        from PyQt6.QtWidgets import QWidget as _QW
+
+        # Map: original brand color -> replacement per mode
+        # (PRIMARY, PRIMARY_DARK, PRIMARY_LIGHT, INPUT_FOCUS/selection-blue)
         _mode_colors = {
-            "deuteranopia": ("#1976D2", "#1565C0", "#42A5F5"),   # Blue
-            "protanopia":   ("#1976D2", "#1565C0", "#42A5F5"),   # Blue
-            "tritanopia":   ("#E91E63", "#C2185B", "#F06292"),   # Pink
-            "monochrome":   ("#9E9E9E", "#757575", "#BDBDBD"),   # Gray
+            "deuteranopia": ("#1976D2", "#1565C0", "#42A5F5", "#1976D2"),  # Blue
+            "protanopia":   ("#1976D2", "#1565C0", "#42A5F5", "#1976D2"),  # Blue
+            "tritanopia":   ("#E91E63", "#C2185B", "#F06292", "#E91E63"),  # Pink
+            "monochrome":   ("#9E9E9E", "#757575", "#BDBDBD", "#9E9E9E"),  # Gray
         }
+
+        # Brand colors to replace (case-insensitive matching via lower())
+        _brand_map_keys = [
+            COLORS.PRIMARY.lower(),        # #a23b84
+            COLORS.PRIMARY_DARK.lower(),   # #8a3270
+            COLORS.PRIMARY_LIGHT.lower(),  # #b85a9a
+            COLORS.INPUT_FOCUS.lower(),    # #3B82F6 -> #3b82f6
+        ]
+
+        def _replace_colors(stylesheet: str, replacements: list) -> str:
+            """Replace all brand color hex codes in a stylesheet string."""
+            result = stylesheet
+            for original, replacement in zip(_brand_map_keys, replacements):
+                # Replace both lower and original casing
+                result = result.replace(original, replacement)
+                result = result.replace(original.upper(), replacement)
+                # Also handle mixed case (#3B82F6 vs #3b82f6)
+                orig_upper = original.upper()
+                if orig_upper != original:
+                    result = result.replace(orig_upper, replacement)
+            return result
+
+        def _restore_colors(stylesheet: str) -> str:
+            """Restore original brand colors in a stylesheet string."""
+            originals = [
+                COLORS.PRIMARY, COLORS.PRIMARY_DARK,
+                COLORS.PRIMARY_LIGHT, COLORS.INPUT_FOCUS,
+            ]
+            return stylesheet  # originals are baked in by _apply_styles()
 
         colors = _mode_colors.get(mode)
         if colors:
-            primary, dark, light = colors
+            primary, dark, light, focus = colors
+            replacements = [primary, dark, light, focus]
             ToggleSwitch.on_color = QColor(primary)
-            self.setStyleSheet(
-                self.styleSheet()
-                + f"""
-                QTabBar::tab:selected {{ background-color: {primary}; }}
-                QTabBar::tab:hover:!selected {{ background-color: {light}; }}
-                QPushButton:hover {{ background-color: {primary}; color: white; }}
-                QToolBar QToolButton:hover {{ background-color: {light}; color: white; }}
-                QMenu::item:selected {{ background-color: {primary}; }}
-                QMenuBar::item:selected {{ background-color: {light}; }}
-                QScrollBar::handle:vertical:hover {{ background-color: {primary}; }}
-                """
-            )
+
+            # Replace in main window stylesheet
+            ss = _replace_colors(self.styleSheet(), replacements)
+            self.setStyleSheet(ss)
+
+            # Replace in ALL child widget stylesheets
+            for child in self.findChildren(_QW):
+                child_ss = child.styleSheet()
+                if child_ss:
+                    # Store original stylesheet for restoration
+                    if not hasattr(child, '_orig_stylesheet'):
+                        child._orig_stylesheet = child_ss
+                    child.setStyleSheet(_replace_colors(child_ss, replacements))
         else:
             # "none" — reset to default
             ToggleSwitch.on_color = None
+
+            # Restore original child stylesheets
+            for child in self.findChildren(_QW):
+                if hasattr(child, '_orig_stylesheet'):
+                    child.setStyleSheet(child._orig_stylesheet)
+                    del child._orig_stylesheet
 
         # Repaint all toggles so they pick up the new on_color
         for toggle in self.findChildren(ToggleSwitch):
