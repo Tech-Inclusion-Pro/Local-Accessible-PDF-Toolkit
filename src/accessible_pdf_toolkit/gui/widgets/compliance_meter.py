@@ -18,8 +18,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtProperty, pyqtSignal, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QPainter, QColor, QPen, QFont
 
-from ...utils.constants import COLORS, WCAGLevel, ComplianceStatus
-from ...core.wcag_validator import ValidationResult, ValidationIssue, IssueSeverity
+from ...utils.constants import COLORS, WCAGLevel, ComplianceStatus, WCAG_EXPLAINER
+from ...core.wcag_validator import ValidationResult, ValidationIssue, IssueSeverity, WCAGValidator
 
 
 class CircularProgress(QWidget):
@@ -104,6 +104,7 @@ class ComplianceMeter(QWidget):
     # Signals for issue interaction
     issue_fix_requested = pyqtSignal(object)  # ValidationIssue
     issue_navigate_requested = pyqtSignal(int)  # page number
+    show_me_requested = pyqtSignal(list)  # list of ValidationIssue
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -191,6 +192,26 @@ class ComplianceMeter(QWidget):
 
         layout.addWidget(self.summary_frame)
 
+        # "Show Me" button — walks through all issues step by step
+        self._show_me_btn = QPushButton("Show Me — Walk Through Issues")
+        self._show_me_btn.setVisible(False)
+        self._show_me_btn.clicked.connect(self._on_show_me_clicked)
+        self._show_me_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS.ACCENT};
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 10px;
+                font-weight: bold;
+                font-size: 11pt;
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS.ACCENT_DARK};
+            }}
+        """)
+        layout.addWidget(self._show_me_btn)
+
         # Issues list (scrollable)
         issues_label = QLabel("Issue Details")
         issues_label.setStyleSheet(f"font-weight: bold; color: {COLORS.TEXT_PRIMARY}; font-size: 12pt;")
@@ -273,6 +294,13 @@ class ComplianceMeter(QWidget):
             f"{summary.get('warnings', 0)} warnings."
         )
 
+        # Show/hide "Show Me" button based on whether there are issues
+        has_issues = bool(result.issues)
+        self._show_me_btn.setVisible(has_issues)
+        if has_issues:
+            count = len(result.issues)
+            self._show_me_btn.setText(f"Show Me — Walk Through {count} Issue{'s' if count != 1 else ''}")
+
         # Populate clickable issues list
         self._populate_issues(result)
 
@@ -296,6 +324,9 @@ class ComplianceMeter(QWidget):
             self._issues_layout.addStretch()
             return
 
+        # Sort issues by priority (Level A errors first)
+        sorted_issues = WCAGValidator.prioritize_issues(result.issues)
+
         # Color map for severity border
         severity_colors = {
             IssueSeverity.ERROR: COLORS.ERROR,
@@ -303,7 +334,7 @@ class ComplianceMeter(QWidget):
             IssueSeverity.INFO: COLORS.INFO,
         }
 
-        for issue in result.issues:
+        for issue in sorted_issues:
             border_color = severity_colors.get(issue.severity, COLORS.INFO)
 
             issue_frame = QFrame()
@@ -329,6 +360,63 @@ class ComplianceMeter(QWidget):
             msg.setWordWrap(True)
             msg.setStyleSheet(f"color: {COLORS.TEXT_PRIMARY}; font-size: 10pt;")
             issue_layout.addWidget(msg)
+
+            # "Why does this matter?" explainer toggle
+            explainer_data = WCAG_EXPLAINER.get(issue.criterion)
+            if explainer_data:
+                why_btn = QPushButton("Why does this matter?")
+                why_btn.setCheckable(True)
+                why_btn.setFixedHeight(20)
+                why_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background: none;
+                        border: none;
+                        color: {COLORS.INFO};
+                        text-decoration: underline;
+                        font-size: 9pt;
+                        padding: 0;
+                        text-align: left;
+                    }}
+                    QPushButton:hover {{
+                        color: {COLORS.PRIMARY_LIGHT};
+                    }}
+                """)
+                issue_layout.addWidget(why_btn)
+
+                explainer_frame = QFrame()
+                explainer_frame.setVisible(False)
+                explainer_frame.setStyleSheet(f"""
+                    QFrame {{
+                        background-color: {COLORS.BACKGROUND_ALT};
+                        border: 1px solid {COLORS.BORDER};
+                        border-radius: 4px;
+                        padding: 8px;
+                    }}
+                """)
+                exp_layout = QVBoxLayout(explainer_frame)
+                exp_layout.setContentsMargins(8, 4, 8, 4)
+                exp_layout.setSpacing(4)
+
+                what_label = QLabel(f"<b>What this means:</b> {explainer_data['plain_language']}")
+                what_label.setWordWrap(True)
+                what_label.setStyleSheet(f"color: {COLORS.TEXT_PRIMARY}; font-size: 9pt;")
+                exp_layout.addWidget(what_label)
+
+                who_label = QLabel(f"<b>Who it affects:</b> {explainer_data['who_it_affects']}")
+                who_label.setWordWrap(True)
+                who_label.setStyleSheet(f"color: {COLORS.TEXT_PRIMARY}; font-size: 9pt;")
+                exp_layout.addWidget(who_label)
+
+                barrier_label = QLabel(f"<b>Real-world barrier:</b> {explainer_data['real_world_barrier']}")
+                barrier_label.setWordWrap(True)
+                barrier_label.setStyleSheet(f"color: {COLORS.TEXT_PRIMARY}; font-size: 9pt;")
+                exp_layout.addWidget(barrier_label)
+
+                issue_layout.addWidget(explainer_frame)
+
+                # Connect toggle
+                frame_ref = explainer_frame
+                why_btn.toggled.connect(lambda checked, f=frame_ref: f.setVisible(checked))
 
             # Action buttons row
             btn_row = QHBoxLayout()
@@ -383,6 +471,11 @@ class ComplianceMeter(QWidget):
 
         self._issues_layout.addStretch()
 
+    def _on_show_me_clicked(self) -> None:
+        """Emit show_me_requested with all current issues."""
+        if self._result and self._result.issues:
+            self.show_me_requested.emit(self._result.issues)
+
     def set_level(self, level: WCAGLevel) -> None:
         """Set the target WCAG level."""
         self.level_value.setText(level.value)
@@ -400,4 +493,5 @@ class ComplianceMeter(QWidget):
         self.errors_label.setText("Errors: 0")
         self.warnings_label.setText("Warnings: 0")
         self.info_label.setText("Info: 0")
+        self._show_me_btn.setVisible(False)
         self._clear_issues()
