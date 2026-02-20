@@ -132,6 +132,83 @@ class AIProcessor(ABC):
             error="Not implemented for this backend",
         )
 
+    def correct_heading_outline(self, text: str, current_headings: List[Dict]) -> AIResponse:
+        """Fix skipped heading levels and mis-leveled headings."""
+        return AIResponse(
+            success=False, content="", model="",
+            backend=self.backend, error="Not implemented for this backend",
+        )
+
+    def rewrite_link_text(self, links: List[Dict]) -> AIResponse:
+        """Rewrite generic link text to descriptive text."""
+        return AIResponse(
+            success=False, content="", model="",
+            backend=self.backend, error="Not implemented for this backend",
+        )
+
+    def suggest_contrast_fixes(self, elements: List[Dict]) -> AIResponse:
+        """Recommend replacement colors for low-contrast elements."""
+        return AIResponse(
+            success=False, content="", model="",
+            backend=self.backend, error="Not implemented for this backend",
+        )
+
+    def suggest_document_metadata(self, text: str) -> AIResponse:
+        """Suggest title, language, and subject for the document."""
+        return AIResponse(
+            success=False, content="", model="",
+            backend=self.backend, error="Not implemented for this backend",
+        )
+
+    def generate_graph_description(self, image_bytes: bytes, context: str = "") -> AIResponse:
+        """Generate long-form chart/graph description."""
+        return AIResponse(
+            success=False, content="", model="",
+            backend=self.backend, error="Not implemented for this backend",
+        )
+
+    def generate_form_labels(self, form_fields: List[Dict]) -> AIResponse:
+        """Generate labels and tooltips for form fields."""
+        return AIResponse(
+            success=False, content="", model="",
+            backend=self.backend, error="Not implemented for this backend",
+        )
+
+    def draft_captions_footnotes(self, elements: List[Dict]) -> AIResponse:
+        """Draft captions for figures and footnote text."""
+        return AIResponse(
+            success=False, content="", model="",
+            backend=self.backend, error="Not implemented for this backend",
+        )
+
+    def suggest_non_color_cues(self, elements: List[Dict]) -> AIResponse:
+        """Suggest text labels, icons, or patterns for color-only information."""
+        return AIResponse(
+            success=False, content="", model="",
+            backend=self.backend, error="Not implemented for this backend",
+        )
+
+    def review_ocr_accuracy(self, ocr_text: str, image_bytes: bytes) -> AIResponse:
+        """Flag likely OCR errors in specialized terminology."""
+        return AIResponse(
+            success=False, content="", model="",
+            backend=self.backend, error="Not implemented for this backend",
+        )
+
+    def generate_bookmark_structure(self, text: str, headings: List[Dict]) -> AIResponse:
+        """Build bookmark hierarchy from headings."""
+        return AIResponse(
+            success=False, content="", model="",
+            backend=self.backend, error="Not implemented for this backend",
+        )
+
+    def generate_math_alt_text(self, formula_image: bytes, context: str = "") -> AIResponse:
+        """Generate spoken-math description of equations."""
+        return AIResponse(
+            success=False, content="", model="",
+            backend=self.backend, error="Not implemented for this backend",
+        )
+
 
 class OllamaProcessor(AIProcessor):
     """Ollama local AI processor."""
@@ -287,6 +364,122 @@ Respond in JSON format:
 }}"""
 
         return self._generate(prompt, system=system)
+
+    def correct_heading_outline(self, text: str, current_headings: List[Dict]) -> AIResponse:
+        """Fix skipped heading levels and mis-leveled headings."""
+        system = (
+            "You are an accessibility expert. Given document text and its current heading outline, "
+            "produce a corrected outline where no heading level is skipped (H1→H2→H3, never H1→H3). "
+            "Respond in JSON: [{\"text\": \"...\", \"current_level\": N, \"suggested_level\": M}]"
+        )
+        headings_str = json.dumps(current_headings[:50])
+        prompt = f"Text (first 4000 chars):\n{text[:4000]}\n\nCurrent headings:\n{headings_str}"
+        return self._generate(prompt, system=system)
+
+    def rewrite_link_text(self, links: List[Dict]) -> AIResponse:
+        """Rewrite generic link text to descriptive text."""
+        system = (
+            "You are an accessibility expert. Rewrite generic link text (like 'click here', 'read more') "
+            "into descriptive text that conveys the link's purpose. "
+            "Respond in JSON: [{\"original\": \"...\", \"url\": \"...\", \"rewritten\": \"...\"}]"
+        )
+        prompt = f"Links to rewrite:\n{json.dumps(links[:30])}"
+        return self._generate(prompt, system=system)
+
+    def suggest_contrast_fixes(self, elements: List[Dict]) -> AIResponse:
+        """Recommend replacement colors for low-contrast elements."""
+        system = (
+            "You are an accessibility expert and color designer. For each low-contrast element, "
+            "suggest a replacement foreground color that meets WCAG AA (4.5:1) against the given background. "
+            "Respond in JSON: [{\"original_fg\": \"#...\", \"bg\": \"#...\", \"suggested_fg\": \"#...\", \"new_ratio\": N.N}]"
+        )
+        prompt = f"Low-contrast elements:\n{json.dumps(elements[:20])}"
+        return self._generate(prompt, system=system)
+
+    def suggest_document_metadata(self, text: str) -> AIResponse:
+        """Suggest title, language, and subject for the document."""
+        system = (
+            "You are an accessibility expert. From the document text, suggest: "
+            "1) A descriptive document title, 2) The primary language (BCP 47 code), "
+            "3) A brief subject description. "
+            "Respond in JSON: {\"title\": \"...\", \"language\": \"...\", \"subject\": \"...\"}"
+        )
+        prompt = f"Document text (first 4000 chars):\n{text[:4000]}"
+        return self._generate(prompt, system=system)
+
+    def generate_graph_description(self, image_bytes: bytes, context: str = "") -> AIResponse:
+        """Generate long-form chart/graph description."""
+        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+        system = (
+            "You are an accessibility expert creating long descriptions for charts and graphs. "
+            "Describe the chart type, axes, data trends, key values, and conclusions. "
+            "Write 2-4 sentences suitable as a long description for screen reader users."
+        )
+        prompt = f"Describe this chart/graph in detail.\nContext: {context[:500] if context else 'No context'}"
+        return self._generate(prompt, images=[image_b64], system=system)
+
+    def generate_form_labels(self, form_fields: List[Dict]) -> AIResponse:
+        """Generate labels and tooltips for form fields."""
+        system = (
+            "You are an accessibility expert. For each unlabelled form field, suggest "
+            "a visible label and a tooltip/title attribute. "
+            "Respond in JSON: [{\"field_id\": \"...\", \"label\": \"...\", \"tooltip\": \"...\"}]"
+        )
+        prompt = f"Form fields needing labels:\n{json.dumps(form_fields[:30])}"
+        return self._generate(prompt, system=system)
+
+    def draft_captions_footnotes(self, elements: List[Dict]) -> AIResponse:
+        """Draft captions for figures and footnote text."""
+        system = (
+            "You are an accessibility expert. Draft concise captions for figures "
+            "and footnote text for referenced items. "
+            "Respond in JSON: [{\"element\": \"...\", \"caption\": \"...\"}]"
+        )
+        prompt = f"Elements needing captions:\n{json.dumps(elements[:20])}"
+        return self._generate(prompt, system=system)
+
+    def suggest_non_color_cues(self, elements: List[Dict]) -> AIResponse:
+        """Suggest text labels, icons, or patterns for color-only information."""
+        system = (
+            "You are an accessibility expert. For each element that uses color alone to convey information, "
+            "suggest an additional non-color cue (text label, icon, pattern, or shape). "
+            "Respond in JSON: [{\"element\": \"...\", \"current_cue\": \"color only\", \"suggested_cue\": \"...\"}]"
+        )
+        prompt = f"Elements using color-only cues:\n{json.dumps(elements[:20])}"
+        return self._generate(prompt, system=system)
+
+    def review_ocr_accuracy(self, ocr_text: str, image_bytes: bytes) -> AIResponse:
+        """Flag likely OCR errors in specialized terminology."""
+        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+        system = (
+            "You are a proofreading expert. Compare the OCR text against the image and flag "
+            "likely misrecognitions, especially in technical terms, proper nouns, and numbers. "
+            "Respond in JSON: [{\"original\": \"...\", \"likely_correct\": \"...\", \"confidence\": \"high/medium/low\"}]"
+        )
+        prompt = f"OCR text to review:\n{ocr_text[:3000]}"
+        return self._generate(prompt, images=[image_b64], system=system)
+
+    def generate_bookmark_structure(self, text: str, headings: List[Dict]) -> AIResponse:
+        """Build bookmark hierarchy from headings."""
+        system = (
+            "You are an accessibility expert. From the heading list, produce a bookmark hierarchy. "
+            "Respond in JSON: [{\"title\": \"...\", \"level\": N, \"page\": N}]"
+        )
+        headings_str = json.dumps(headings[:50])
+        prompt = f"Headings:\n{headings_str}\n\nDocument text (first 2000 chars):\n{text[:2000]}"
+        return self._generate(prompt, system=system)
+
+    def generate_math_alt_text(self, formula_image: bytes, context: str = "") -> AIResponse:
+        """Generate spoken-math description of equations."""
+        image_b64 = base64.b64encode(formula_image).decode("utf-8")
+        system = (
+            "You are a math accessibility expert. Describe this mathematical formula "
+            "in spoken-math format suitable for screen readers. Use natural language, "
+            "e.g., 'x squared plus 2 x plus 1 equals open parenthesis x plus 1 close parenthesis squared'. "
+            "Respond with ONLY the spoken description."
+        )
+        prompt = f"Describe this formula for a screen reader.\nContext: {context[:300] if context else 'No context'}"
+        return self._generate(prompt, images=[image_b64], system=system)
 
 
 class LMStudioProcessor(AIProcessor):
