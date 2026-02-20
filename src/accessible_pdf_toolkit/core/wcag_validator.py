@@ -422,7 +422,7 @@ class WCAGValidator:
                             page=page.page_number,
                             element=elem.text,
                             suggestion="Use descriptive text that indicates the link's purpose",
-                            auto_fixable=True,
+                            auto_fixable=False,
                         ))
 
             # Check untagged hyperlinks from PDF annotations
@@ -641,3 +641,34 @@ class WCAGValidator:
                 })
 
         return fixes
+
+    @staticmethod
+    def prioritize_issues(issues: List[ValidationIssue]) -> List[ValidationIssue]:
+        """
+        Sort issues by priority: WCAG level (A first), severity (ERROR first),
+        then screen-reader-blocking criteria first.
+
+        Args:
+            issues: List of validation issues
+
+        Returns:
+            Sorted list (highest priority first)
+        """
+        SCREEN_READER_BLOCKERS = {"1.3.1", "1.3.2", "1.1.1", "2.4.2", "3.1.1"}
+
+        LEVEL_ORDER = {WCAGLevel.A: 0, WCAGLevel.AA: 1, WCAGLevel.AAA: 2}
+        SEVERITY_ORDER = {
+            IssueSeverity.ERROR: 0,
+            IssueSeverity.WARNING: 1,
+            IssueSeverity.INFO: 2,
+        }
+
+        def sort_key(issue: ValidationIssue):
+            criterion_info = WCAG_CRITERIA.get(issue.criterion, {})
+            level = criterion_info.get("level", WCAGLevel.AAA)
+            level_val = LEVEL_ORDER.get(level, 2)
+            severity_val = SEVERITY_ORDER.get(issue.severity, 2)
+            blocker_val = 0 if issue.criterion in SCREEN_READER_BLOCKERS else 1
+            return (level_val, severity_val, blocker_val)
+
+        return sorted(issues, key=sort_key)

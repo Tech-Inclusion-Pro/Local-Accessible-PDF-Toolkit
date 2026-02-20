@@ -104,6 +104,13 @@ class ComplianceStatus(Enum):
     NON_COMPLIANT = auto()
 
 
+class RemediationStatus(Enum):
+    """Status of a remediation category."""
+    NOT_STARTED = "not_started"
+    IN_PROGRESS = "in_progress"
+    COMPLETE = "complete"
+
+
 class ColorBlindMode(Enum):
     """Color blindness simulation / accommodation modes."""
     NONE = "none"
@@ -261,6 +268,146 @@ WCAG_CRITERIA = {
         "name": "Name, Role, Value",
         "level": WCAGLevel.A,
         "description": "For all UI components, name and role can be programmatically determined",
+    },
+}
+
+
+# Remediation categories mapping to WCAG criteria
+REMEDIATION_CATEGORIES = {
+    "document_title": {
+        "label": "Document Title",
+        "criteria": ["2.4.2"],
+        "description": "Document has a meaningful title",
+    },
+    "document_language": {
+        "label": "Document Language",
+        "criteria": ["3.1.1"],
+        "description": "Primary language is specified",
+    },
+    "language_of_parts": {
+        "label": "Language of Parts",
+        "criteria": ["3.1.2"],
+        "description": "Foreign-language passages are marked",
+    },
+    "tagged_pdf": {
+        "label": "Tagged PDF",
+        "criteria": ["1.3.1"],
+        "description": "Document has a tag structure tree",
+    },
+    "reading_order": {
+        "label": "Reading Order",
+        "criteria": ["1.3.2"],
+        "description": "Content order matches visual flow",
+    },
+    "headings": {
+        "label": "Headings",
+        "criteria": ["1.3.1", "2.4.6"],
+        "description": "Headings use proper hierarchy (H1-H6)",
+    },
+    "alt_text": {
+        "label": "Alternative Text",
+        "criteria": ["1.1.1"],
+        "description": "Images have descriptive alt text",
+    },
+    "tables": {
+        "label": "Tables",
+        "criteria": ["1.3.1"],
+        "description": "Tables use TH/TD with scope attributes",
+    },
+    "links": {
+        "label": "Links",
+        "criteria": ["2.4.4"],
+        "description": "Links have descriptive, meaningful text",
+    },
+    "color_contrast": {
+        "label": "Color Contrast",
+        "criteria": ["1.4.3", "1.4.6"],
+        "description": "Text meets minimum contrast ratios",
+    },
+    "bookmarks": {
+        "label": "Bookmarks",
+        "criteria": ["2.4.1"],
+        "description": "Bookmarks allow navigation bypass",
+    },
+    "forms": {
+        "label": "Forms",
+        "criteria": ["4.1.2"],
+        "description": "Form fields have labels and roles",
+    },
+    "artifacts": {
+        "label": "Artifacts",
+        "criteria": ["1.3.1"],
+        "description": "Decorative elements are marked as artifacts",
+    },
+    "security": {
+        "label": "Security Settings",
+        "criteria": [],
+        "description": "Security settings allow screen reader access",
+    },
+}
+
+
+# WCAG Explainer — plain-language explanations for each criterion
+WCAG_EXPLAINER = {
+    "1.1.1": {
+        "plain_language": "Every image, chart, or non-text element needs a text description so people who can't see it still get the information.",
+        "who_it_affects": "Blind and low-vision users who rely on screen readers, and users on slow connections who disable images.",
+        "real_world_barrier": "A blind student opens a PDF lecture slide. The chart showing quarterly sales has no alt text, so the screen reader says 'image' — the student has no idea what the chart shows.",
+    },
+    "1.3.1": {
+        "plain_language": "The visual structure of the document (headings, tables, lists) must also be encoded in the file's tags so assistive technology can understand it.",
+        "who_it_affects": "Screen reader users, braille display users, and people who use custom stylesheets.",
+        "real_world_barrier": "A table looks fine visually, but without TH tags a screen reader reads all cells in a flat stream — the user can't tell which value belongs to which column.",
+    },
+    "1.3.2": {
+        "plain_language": "The order in which a screen reader reads the content must match the visual reading flow (left-to-right, top-to-bottom, column by column).",
+        "who_it_affects": "Screen reader users and keyboard-only navigators.",
+        "real_world_barrier": "A two-column newsletter is read left-across-both-columns instead of column-by-column, so sentences from unrelated articles get interleaved.",
+    },
+    "1.4.3": {
+        "plain_language": "Text must have enough contrast against its background — at least 4.5:1 for normal text — so it's readable for people with low vision.",
+        "who_it_affects": "People with low vision, color vision deficiencies, and anyone reading in bright sunlight.",
+        "real_world_barrier": "Light gray text on a white background is nearly invisible to a person with moderate low vision, making the document unreadable without a magnifier.",
+    },
+    "1.4.6": {
+        "plain_language": "Enhanced contrast (7:1 for normal text) makes text even easier to read for users with moderately low vision who don't use assistive technology.",
+        "who_it_affects": "Users with moderate low vision who don't use screen magnifiers or high-contrast modes.",
+        "real_world_barrier": "A user with early macular degeneration can read 7:1 contrast text comfortably but struggles with 4.5:1 text, especially in longer documents.",
+    },
+    "2.4.1": {
+        "plain_language": "Long documents need bookmarks or a table of contents so users can jump directly to sections instead of listening to the entire document.",
+        "who_it_affects": "Screen reader users and keyboard-only navigators.",
+        "real_world_barrier": "A 50-page policy document has no bookmarks. A screen reader user must listen from page 1 every time they want to find Section 5.",
+    },
+    "2.4.2": {
+        "plain_language": "The document must have a descriptive title — not a filename — so users know what it is before they open it.",
+        "who_it_affects": "Screen reader users, people managing many browser tabs, and search engine indexing.",
+        "real_world_barrier": "A screen reader announces 'doc_v3_final_FINAL.pdf' instead of 'Spring 2025 Course Syllabus', leaving the user unsure if they have the right file.",
+    },
+    "2.4.4": {
+        "plain_language": "Link text must describe where the link goes. 'Click here' tells the user nothing; 'Download the 2025 budget report (PDF)' is clear.",
+        "who_it_affects": "Screen reader users who navigate by pulling up a list of links on the page.",
+        "real_world_barrier": "A screen reader's link list shows five entries all labelled 'Click here'. The user has no way to tell them apart without reading surrounding text.",
+    },
+    "2.4.6": {
+        "plain_language": "Headings and form labels must clearly describe the content or purpose of the section they introduce.",
+        "who_it_affects": "Screen reader users and anyone scanning the document for specific information.",
+        "real_world_barrier": "A heading says 'Section 3' instead of 'Grading Policy', forcing the user to read the entire section to find out what it covers.",
+    },
+    "3.1.1": {
+        "plain_language": "The document must declare its primary language so screen readers use the correct pronunciation rules.",
+        "who_it_affects": "Screen reader users in any language.",
+        "real_world_barrier": "An English document has no language tag. A French screen reader tries to pronounce every word with French phonetics, making the content unintelligible.",
+    },
+    "3.1.2": {
+        "plain_language": "When a passage switches to a different language, it must be tagged so the screen reader switches pronunciation.",
+        "who_it_affects": "Screen reader users reading multilingual documents.",
+        "real_world_barrier": "A legal document includes Latin phrases. Without language-of-parts tags, the English screen reader mispronounces every Latin term.",
+    },
+    "4.1.2": {
+        "plain_language": "Every form field and interactive control must expose its name and role to assistive technology so users know what it does.",
+        "who_it_affects": "Screen reader users and voice-control users who interact with form fields.",
+        "real_world_barrier": "A PDF form has an unlabelled text field. The screen reader says 'edit text' but doesn't say 'First Name', so the user doesn't know what to type.",
     },
 }
 
