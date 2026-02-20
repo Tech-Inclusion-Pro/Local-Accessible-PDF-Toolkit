@@ -80,8 +80,21 @@ class SuggestionItem(QFrame):
 
         # Current value
         current = self._detection.get("current_value", "")
+        detection_type = self._detection.get("detection_type", "")
         if current:
-            current_label = QLabel(f"Current: {current[:50]}{'...' if len(current) > 50 else ''}")
+            current_label = QLabel(current[:80] + ("..." if len(current) > 80 else ""))
+            current_label.setWordWrap(True)
+            header.addWidget(current_label, 1)
+        elif detection_type:
+            # Show a meaningful label even when current_value is empty
+            type_labels = {
+                "image": "Image \u2014 needs alt text",
+                "heading": "Heading \u2014 needs tag",
+                "table": "Table \u2014 needs structure",
+                "link": "Link \u2014 needs descriptive text",
+            }
+            fallback_label = type_labels.get(detection_type, detection_type)
+            current_label = QLabel(fallback_label)
             current_label.setWordWrap(True)
             header.addWidget(current_label, 1)
         else:
@@ -89,19 +102,27 @@ class SuggestionItem(QFrame):
 
         layout.addLayout(header)
 
-        # Suggestion row
+        # Suggestion / edit row — always show an editable field
         suggested = self._detection.get("suggested_value", "")
-        if suggested:
-            suggestion_row = QHBoxLayout()
-            suggestion_row.addWidget(QLabel("AI Suggestion:"))
+        suggestion_row = QHBoxLayout()
 
+        if suggested:
+            suggestion_row.addWidget(QLabel("Suggestion:"))
             self._suggestion_edit = QLineEdit(suggested)
             self._suggestion_edit.setPlaceholderText("Edit suggestion...")
-            suggestion_row.addWidget(self._suggestion_edit, 1)
-
-            layout.addLayout(suggestion_row)
         else:
-            self._suggestion_edit = None
+            suggestion_row.addWidget(QLabel("Enter value:"))
+            self._suggestion_edit = QLineEdit()
+            placeholder = {
+                "image": "Enter descriptive alt text for this image...",
+                "heading": "Enter heading text...",
+                "table": "Enter table description...",
+                "link": "Enter descriptive link text...",
+            }.get(detection_type, "Enter value...")
+            self._suggestion_edit.setPlaceholderText(placeholder)
+
+        suggestion_row.addWidget(self._suggestion_edit, 1)
+        layout.addLayout(suggestion_row)
 
         # Action buttons
         btn_row = QHBoxLayout()
@@ -229,6 +250,7 @@ class AISuggestionsPanel(QWidget):
     undo_requested = pyqtSignal()
     save_requested = pyqtSignal()
     preview_requested = pyqtSignal()
+    doc_property_changed = pyqtSignal(str, str)  # (property_name, value)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -510,14 +532,14 @@ class AISuggestionsPanel(QWidget):
         self._clear_layout(self._doc_layout)
 
         props = [
-            ("Title", title, "Add a descriptive title"),
-            ("Language", language, "Set document language (e.g., 'en')"),
-            ("Author", author, None),
-            ("Subject", subject, None),
+            ("Title", "title", title, "Add a descriptive title"),
+            ("Language", "language", language, "Set document language (e.g., 'en')"),
+            ("Author", "author", author, None),
+            ("Subject", "subject", subject, None),
         ]
 
         issues = 0
-        for label, value, suggestion in props:
+        for label, prop_key, value, suggestion in props:
             row = QHBoxLayout()
 
             status_icon = "\u2713" if value else "\u25B3"
@@ -528,14 +550,33 @@ class AISuggestionsPanel(QWidget):
             else:
                 edit = QLineEdit()
                 edit.setPlaceholderText(suggestion or f"Enter {label.lower()}")
-                row.addWidget(edit)
-                issues += 1
+                row.addWidget(edit, 1)
+
+                # Only add Apply buttons for title and language (fixable properties)
+                if prop_key in ("title", "language"):
+                    apply_btn = QPushButton("Apply")
+                    apply_btn.setFixedWidth(60)
+                    apply_btn.clicked.connect(
+                        lambda checked, e=edit, k=prop_key: self._on_doc_prop_apply(k, e.text())
+                    )
+                    edit.returnPressed.connect(
+                        lambda e=edit, k=prop_key: self._on_doc_prop_apply(k, e.text())
+                    )
+                    row.addWidget(apply_btn)
+                    issues += 1
+                else:
+                    issues += 1
 
             container = QWidget()
             container.setLayout(row)
             self._doc_layout.addWidget(container)
 
         self._doc_section.set_badge_count(issues)
+
+    def _on_doc_prop_apply(self, prop: str, value: str) -> None:
+        """Handle Apply button for a document property."""
+        if value.strip():
+            self.doc_property_changed.emit(prop, value.strip())
 
     def set_headings(self, detections: List[Dict[str, Any]]) -> None:
         """Set heading suggestions."""

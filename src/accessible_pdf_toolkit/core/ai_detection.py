@@ -269,25 +269,48 @@ class AIDetectionService:
         """
         detections = []
 
-        for img in page.images:
-            # Check if image already has alt text
-            has_alt = False  # Would need structure tree check
+        # Check the alt text map from the structure tree
+        alt_text_map = getattr(document, "alt_text_map", {})
+        page_alt_entries = alt_text_map.get(page.page_number, [])
+        figures_with_alt = [
+            entry for entry in page_alt_entries
+            if entry.get("alt_text") and entry["alt_text"].strip()
+        ]
+
+        for img_idx, img in enumerate(page.images):
+            w = img["width"]
+            h = img["height"]
+            colorspace = img.get("colorspace", "unknown")
+
+            # Check if this image already has alt text from the structure tree
+            has_alt = img_idx < len(figures_with_alt)
+            existing_alt = figures_with_alt[img_idx]["alt_text"] if has_alt else None
+
+            if has_alt:
+                current = f"Alt: {existing_alt[:60]}"
+                status = DetectionStatus.CORRECT
+                suggested = existing_alt
+            else:
+                current = f"Image {img_idx + 1} on page {page.page_number} ({w}\u00d7{h}, {colorspace}) \u2014 no alt text"
+                status = DetectionStatus.MISSING
+                # Provide a placeholder the user can edit
+                suggested = f"Descriptive alt text for image on page {page.page_number}"
 
             detection = Detection(
                 id=str(uuid.uuid4()),
                 detection_type=DetectionType.IMAGE,
                 page_number=page.page_number,
-                bbox=(0, 0, img["width"], img["height"]),
-                status=DetectionStatus.MISSING if not has_alt else DetectionStatus.CORRECT,
-                current_value=None if not has_alt else "Has alt text",
-                suggested_value=None,  # Will be generated on demand
+                bbox=(0, 0, w, h),
+                status=status,
+                current_value=current,
+                suggested_value=suggested,
                 confidence=0.9,
                 metadata={
                     "image_index": img["index"],
                     "xref": img["xref"],
-                    "width": img["width"],
-                    "height": img["height"],
-                    "colorspace": img.get("colorspace"),
+                    "width": w,
+                    "height": h,
+                    "colorspace": colorspace,
                 },
             )
             detections.append(detection)
