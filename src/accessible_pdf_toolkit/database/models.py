@@ -225,6 +225,54 @@ class Setting(Base):
         return f"<Setting(user_id={self.user_id}, key='{self.key}')>"
 
 
+class AuditLogEntry(Base):
+    """Audit log entry tracking before/after changes for remediation."""
+
+    __tablename__ = "audit_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    file_id: Mapped[int] = mapped_column(Integer, ForeignKey("files.id"), nullable=False)
+    user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    action: Mapped[str] = mapped_column(String(100), nullable=False)
+    criterion: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    page: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    original_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    new_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    element_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_audit_log_file", "file_id"),
+        Index("ix_audit_log_created", "created_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<AuditLogEntry(id={self.id}, action='{self.action}')>"
+
+
+class DocumentProfile(Base):
+    """Document profile memory — tracks sessions and progress per document."""
+
+    __tablename__ = "document_profiles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    file_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    file_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    original_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    last_session_date: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    last_issues_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    resolved_criteria: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    session_count: Mapped[int] = mapped_column(Integer, default=1)
+
+    __table_args__ = (
+        Index("ix_document_profiles_hash", "file_hash"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<DocumentProfile(id={self.id}, name='{self.original_name}')>"
+
+
 # Global engine and session factory
 _engine: Optional[Engine] = None
 _SessionFactory: Optional[sessionmaker] = None
@@ -322,3 +370,18 @@ def _run_migrations(engine: Engine) -> None:
                 except Exception:
                     # Column might already exist or other error
                     pass
+
+    # Create audit_log table if it doesn't exist
+    table_names = inspector.get_table_names()
+    if 'audit_log' not in table_names:
+        try:
+            AuditLogEntry.__table__.create(engine, checkfirst=True)
+        except Exception:
+            pass
+
+    # Create document_profiles table if it doesn't exist
+    if 'document_profiles' not in table_names:
+        try:
+            DocumentProfile.__table__.create(engine, checkfirst=True)
+        except Exception:
+            pass
