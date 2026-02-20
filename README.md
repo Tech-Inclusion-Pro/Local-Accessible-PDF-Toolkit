@@ -41,6 +41,13 @@ This app runs on **your computer only**. Your files never leave your machine. Th
 | **Check PDFs** | Find accessibility problems including contrast, tables, links, and reading order |
 | **Fix PDFs** | Auto-fix titles, language, tags, headings, and image descriptions |
 | **AI Helper** | Get smart suggestions and AI-generated image alt text from AI on YOUR computer |
+| **Show Me Walkthroughs** | Step-by-step guides for tasks that need external tools (like Adobe Acrobat) |
+| **Progress Tracker** | Visual dashboard showing remediation status across 14 WCAG categories |
+| **WCAG Explainer** | "Why does this matter?" tooltips on every issue, explaining who is affected |
+| **Issue Priority Queue** | Issues sorted by impact: Level A errors first, screen-reader blockers highlighted |
+| **Compliance Reports** | Generate HTML accessibility audit reports with actions taken and remaining items |
+| **Document Memory** | Remembers your progress across sessions - see your previous score when reopening |
+| **Before/After Audit Log** | Tracks every change made (title set, alt text added, etc.) for accountability |
 | **Batch Process** | Validate and fix multiple PDFs at once via Tools > Batch Process |
 | **Export HTML** | Turn PDFs into accessible web pages (via File menu) |
 | **Undo / Redo** | Undo any tag edit or auto-fix with Ctrl+Z / Ctrl+Shift+Z |
@@ -49,9 +56,111 @@ This app runs on **your computer only**. Your files never leave your machine. Th
 
 ---
 
-## What's New (v1.3.0)
+## What's New (v1.4.0)
 
-### Accessibility Settings with Live Preview
+### Two Modes: AI-Handled and Show Me
+
+The app now operates in two complementary modes so AI never leaves you at a dead end:
+
+- **AI-Handled** - For issues the app can fix directly (title, language, tags, headings, alt text). Ollama generates copy-ready output and applies it with one click.
+- **Show Me** - For tasks that require external tools (like Adobe Acrobat Pro). The app provides step-by-step guided walkthroughs so you always know exactly what to do next.
+
+### Show Me Walkthroughs (7 Guides)
+
+Step-by-step instructions for tasks that need hands-on work in external tools:
+
+| Walkthrough | Steps | What It Covers |
+|-------------|-------|----------------|
+| Tag the Document Structure | 6 | Opening the tag tree, creating parent tags, auto-tagging pages |
+| Fix Reading Order | 4 | Using the Order panel in Acrobat to reorder content |
+| Apply Artifacts | 3 | Marking decorative elements so screen readers skip them |
+| Table Headers and Scope | 4 | Setting TH tags and row/column scope on table cells |
+| Set Tab Order for Forms | 3 | Configuring form field tab order for keyboard navigation |
+| Security Settings | 3 | Ensuring security settings allow screen reader access |
+| Screen Reader Testing | 4 | Running NVDA/VoiceOver to verify your fixes work |
+
+### 11 New AI Capabilities
+
+All running locally on your machine via Ollama:
+
+| Capability | What It Does |
+|------------|--------------|
+| Correct Heading Outline | Fixes skipped heading levels and mis-leveled headings |
+| Rewrite Link Text | Rewrites generic "click here" links to descriptive text |
+| Suggest Contrast Fixes | Recommends replacement colors for low-contrast elements |
+| Suggest Document Metadata | Suggests title, language, and subject from content |
+| Generate Graph Descriptions | Long-form chart and graph descriptions for complex visuals |
+| Generate Form Labels | Labels and tooltips for unlabelled form fields |
+| Draft Captions and Footnotes | Captions for figures and footnote text |
+| Suggest Non-Color Cues | Text labels, icons, and patterns for color-only information |
+| Review OCR Accuracy | Flags likely OCR errors in specialized terminology |
+| Generate Bookmark Structure | Builds bookmark hierarchy from heading structure |
+| Generate Math Alt Text | Spoken-math descriptions for equations and formulas |
+
+### Progress Tracker
+
+A visual dashboard in the right panel showing remediation status across 14 categories:
+
+- Document Title, Document Language, Language of Parts
+- Tagged PDF, Reading Order, Headings, Alternative Text
+- Tables, Links, Color Contrast, Bookmarks
+- Forms, Artifacts, Security Settings
+
+Each category shows: Not Started, In Progress, or Complete with an overall progress bar.
+
+### WCAG Explainer Layer
+
+Every issue now has a "Why does this matter?" toggle that reveals:
+- **What this means** - plain-language explanation of the WCAG criterion
+- **Who it affects** - which users are impacted (blind, low-vision, motor, etc.)
+- **Real-world barrier** - a concrete example of the accessibility failure
+
+Covers all 12 WCAG criteria checked by the app (1.1.1 through 4.1.2).
+
+### Issue Priority Queue
+
+Issues are now sorted by real-world impact:
+1. WCAG Level A errors first (most critical)
+2. Then AA, then AAA
+3. Within each level: ERROR > WARNING > INFO
+4. Screen-reader-blocking criteria (1.3.1, 1.3.2, 1.1.1, 2.4.2, 3.1.1) prioritized
+
+### Compliance Report Generator
+
+Generate a full HTML accessibility audit report from Tools > Generate Compliance Report:
+- Executive summary with score, level, and pass/fail status
+- All issues found, grouped by WCAG criterion with severity badges
+- Actions taken (from the audit log)
+- Remaining items needing manual review
+- The report itself is WCAG-compliant with proper headings, lang attribute, and semantic HTML
+
+### Document Profile Memory
+
+The app remembers your documents across sessions:
+- Recognizes returning documents by file hash (SHA-256)
+- Shows your previous compliance score when reopening a file
+- Tracks session count, resolved criteria, and persistent issues
+- Helps you pick up exactly where you left off
+
+### Before/After Audit Log
+
+Every accessibility change is logged:
+- What was changed (action, criterion, page)
+- Original value and new value
+- Feeds into compliance reports for accountability
+
+### Bug Fixes
+
+- **Fixed: Score stuck at 82% after auto-fix** - The alt text map was never refreshed after adding image descriptions, causing the validator to always report images as missing alt text. Now refreshed automatically.
+- **Fixed: Blank image boxes in AI Suggestions** - Image detection now provides meaningful descriptions and editable fields instead of blank entries.
+- **Fixed: Changes not persisting across sessions** - PDF is now auto-saved to disk after every fix, and the compliance score is stored in the document profile.
+- **Fixed: Validation score not updating after fixes** - Suggestion apply, document property changes, and wizard inline fixes now all trigger re-validation.
+- **Fixed: Heading tags not persisted to PDF** - Auto-fix heading tagging now writes to the PDF structure tree (not just in-memory).
+- **Fixed: Figure tags missing page reference** - Structure elements now include /Pg so alt text maps correctly to pages.
+
+### What was new in v1.3.0
+
+#### Accessibility Settings with Live Preview
 - **High Contrast Mode** - black background with white text for maximum readability
 - **Reduced Motion** - disables all animations including toggle switch transitions
 - **Large Text Mode** - scales all fonts by 125% across the entire application
@@ -61,7 +170,7 @@ This app runs on **your computer only**. Your files never leave your machine. Th
 - **Custom Cursor Styles** - Large Black, Large White, Large Crosshair, High Visibility, and animated Cursor Trail
 - **Live Preview** - every accessibility setting previews instantly as you toggle it, no save required
 
-### Animated Toggle Switches
+#### Animated Toggle Switches
 - All checkbox controls replaced with custom animated toggle switches
 - Smooth sliding thumb animation with color interpolation
 - Full keyboard accessibility (Tab to focus, Space/Enter to toggle)
@@ -201,21 +310,22 @@ When the app opens:
 The app has 3 tabs on the left side:
 
 #### 1. Dashboard
-- See all your recent PDFs
+- See all your recent PDFs with compliance scores
 - Drag files here to open them
 - Click any file to work on it
-- View compliance statistics
+- Returning documents show previous score and session count
 
 #### 2. PDF Viewer
 - See your PDF with colored highlights
 - AI-powered accessibility analysis
 - Apply suggested fixes directly
+- Progress tracker shows remediation status across 14 categories
 - Colors show what needs fixing:
-  - 🟣 **Purple** = Headings
-  - 🟡 **Yellow** = Images that need descriptions
-  - 🟢 **Green** = Tables
-  - 🟠 **Orange** = Links
-  - 🔴 **Red** = Problems to fix
+  - Purple = Headings
+  - Yellow = Images that need descriptions
+  - Green = Tables
+  - Orange = Links
+  - Red = Problems to fix
 
 #### 3. Settings
 - **AI Backend** - pick your AI helper (Ollama, LM Studio, GPT4All, and more)
@@ -319,7 +429,7 @@ Want an app you can double-click to open? Do this:
 
 **AI doesn't work**
 - Make sure Ollama is running
-- Go to Settings → AI Backend → Click "Test Connection"
+- Go to Settings > AI Backend > Click "Test Connection"
 
 ### Still Stuck?
 
@@ -373,14 +483,28 @@ The auto-fix feature can resolve these issues automatically:
 | Missing title | Sets a human-readable title from the filename |
 | Missing language | Sets document language to English |
 | No tags / structure | Creates a structure tree and marks the PDF as tagged |
-| Untagged headings | Detects headings by font size and assigns H1-H6 tags |
+| Untagged headings | Detects headings by font size and assigns H1-H6 tags (persisted to structure tree) |
 | Missing image alt text | Uses AI-generated descriptions when available, placeholder otherwise |
+
+### Show Me Walkthrough Capabilities
+
+For issues that require external tools, the app provides step-by-step guides:
+
+| What It Guides | External Tool |
+|----------------|---------------|
+| Tag document structure | Adobe Acrobat Pro |
+| Fix reading order | Adobe Acrobat Pro |
+| Apply artifacts | Adobe Acrobat Pro |
+| Set table headers and scope | Adobe Acrobat Pro |
+| Set form tab order | Adobe Acrobat Pro |
+| Configure security settings | Adobe Acrobat Pro |
+| Screen reader testing | NVDA / VoiceOver |
 
 ---
 
 ## Credits
 
-Made with ❤️ by **Rocco Catrone** 
+Made with love by **Rocco Catrone**
 
 Helping make the digital world accessible to everyone!
 
