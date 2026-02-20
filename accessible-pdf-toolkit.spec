@@ -62,6 +62,8 @@ a = Analysis(
         'accessible_pdf_toolkit.gui.widgets.tutorial_dialog',
         'accessible_pdf_toolkit.gui.dialogs',
         'accessible_pdf_toolkit.gui.dialogs.privacy_warning_dialog',
+        'accessible_pdf_toolkit.gui.dialogs.batch_dialog',
+        'PyQt6.QtSvg',
         'accessible_pdf_toolkit.core.ai_detection',
         'PyQt6',
         'PyQt6.QtCore',
