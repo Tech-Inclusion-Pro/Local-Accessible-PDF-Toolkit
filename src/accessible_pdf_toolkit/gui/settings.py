@@ -48,6 +48,7 @@ class SettingsPanel(QWidget):
 
     # Signals
     settings_changed = pyqtSignal(dict)
+    preview_requested = pyqtSignal(dict)
     ai_backend_changed = pyqtSignal(str)
 
     def __init__(self, user: Optional[User] = None, parent=None):
@@ -56,6 +57,7 @@ class SettingsPanel(QWidget):
         self._user = user
         self._db = DatabaseQueries() if user else None
         self._config = DEFAULT_CONFIG.copy()
+        self._loading_config = False
 
         self._setup_ui()
         self._setup_accessibility()
@@ -625,10 +627,20 @@ class SettingsPanel(QWidget):
         self.custom_cursor_combo.addItem("Large White Cursor", CustomCursorStyle.LARGE_WHITE.value)
         self.custom_cursor_combo.addItem("Large Crosshair", CustomCursorStyle.LARGE_CROSSHAIR.value)
         self.custom_cursor_combo.addItem("High Visibility (Yellow/Black)", CustomCursorStyle.HIGH_VISIBILITY.value)
+        self.custom_cursor_combo.addItem("Cursor Trail", CustomCursorStyle.CURSOR_TRAIL.value)
         self.custom_cursor_combo.setAccessibleName("Custom cursor style")
         cursor_row.addWidget(self.custom_cursor_combo)
         cursor_row.addStretch()
         display_layout.addLayout(cursor_row)
+
+        # Connect live preview signals for instant feedback
+        self.high_contrast_cb.toggled.connect(self._emit_preview)
+        self.reduced_motion_cb.toggled.connect(self._emit_preview)
+        self.large_text_cb.toggled.connect(self._emit_preview)
+        self.enhanced_focus_cb.toggled.connect(self._emit_preview)
+        self.dyslexia_font_cb.toggled.connect(self._emit_preview)
+        self.color_blind_combo.currentIndexChanged.connect(self._emit_preview)
+        self.custom_cursor_combo.currentIndexChanged.connect(self._emit_preview)
 
         layout.addWidget(display_group)
 
@@ -1026,6 +1038,7 @@ class SettingsPanel(QWidget):
 
     def _apply_config_to_ui(self) -> None:
         """Apply loaded config to UI controls."""
+        self._loading_config = True
         ai = self._config.get("ai", {})
 
         # Apply AI config to the new panel
@@ -1083,6 +1096,24 @@ class SettingsPanel(QWidget):
         self.encrypt_files_cb.setChecked(sec.get("encrypt_files", True))
         self.auto_logout.setValue(sec.get("auto_logout_minutes", 30))
         self.require_password_cb.setChecked(sec.get("require_password", False))
+        self._loading_config = False
+
+    def _emit_preview(self, *_) -> None:
+        """Emit current accessibility settings for instant live preview."""
+        if self._loading_config:
+            return
+        preview_config = {
+            "ui": {
+                "high_contrast": self.high_contrast_cb.isChecked(),
+                "reduced_motion": self.reduced_motion_cb.isChecked(),
+                "large_text_mode": self.large_text_cb.isChecked(),
+                "enhanced_focus": self.enhanced_focus_cb.isChecked(),
+                "dyslexia_font": self.dyslexia_font_cb.isChecked(),
+                "color_blind_mode": self.color_blind_combo.currentData(),
+                "custom_cursor": self.custom_cursor_combo.currentData(),
+            }
+        }
+        self.preview_requested.emit(preview_config)
 
     def _save_settings(self) -> None:
         """Save settings to database."""

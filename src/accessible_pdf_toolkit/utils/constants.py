@@ -120,6 +120,7 @@ class CustomCursorStyle(Enum):
     LARGE_WHITE = "large-white"
     LARGE_CROSSHAIR = "large-crosshair"
     HIGH_VISIBILITY = "high-visibility"
+    CURSOR_TRAIL = "cursor-trail"
 
 
 class AIBackend(Enum):

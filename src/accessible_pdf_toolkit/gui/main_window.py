@@ -21,8 +21,8 @@ from PyQt6.QtWidgets import (
     QSplitter,
     QStackedWidget,
 )
-from PyQt6.QtCore import Qt, QSize, pyqtSignal
-from PyQt6.QtGui import QAction, QKeySequence, QIcon, QFont, QCursor, QPixmap
+from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal
+from PyQt6.QtGui import QAction, QKeySequence, QIcon, QFont, QCursor, QPixmap, QColor, QPainter
 
 from ..utils.constants import (
     APP_NAME,
@@ -44,6 +44,66 @@ from .dialogs.batch_dialog import BatchDialog
 logger = get_logger(__name__)
 
 
+class CursorTrailOverlay(QWidget):
+    """Transparent overlay that draws a fading trail of dots behind the cursor."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setStyleSheet("background: transparent;")
+        self._trail_points = []  # list of (QPoint, float timestamp)
+        self._max_age = 0.4  # seconds before dots fade out
+        self._max_points = 20
+        self._dot_size = 10
+        self._color = QColor(COLORS.PRIMARY)
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._update_trail)
+
+    def _update_trail(self):
+        import time
+        now = time.time()
+        global_pos = QCursor.pos()
+        local_pos = self.mapFromGlobal(global_pos)
+        if self.rect().contains(local_pos):
+            if not self._trail_points:
+                self._trail_points.append((local_pos, now))
+            else:
+                last = self._trail_points[-1][0]
+                if abs(local_pos.x() - last.x()) + abs(local_pos.y() - last.y()) > 3:
+                    self._trail_points.append((local_pos, now))
+        self._trail_points = [(p, t) for p, t in self._trail_points if now - t < self._max_age]
+        if len(self._trail_points) > self._max_points:
+            self._trail_points = self._trail_points[-self._max_points:]
+        self.update()
+
+    def paintEvent(self, event):
+        import time
+        now = time.time()
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        for point, timestamp in self._trail_points:
+            age = now - timestamp
+            opacity = max(0.0, 1.0 - age / self._max_age)
+            radius = max(1, int(self._dot_size * opacity / 2))
+            color = QColor(self._color)
+            color.setAlphaF(opacity * 0.6)
+            painter.setBrush(color)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(point, radius, radius)
+        painter.end()
+
+    def start(self):
+        self.show()
+        self.raise_()
+        self._timer.start(33)  # ~30fps
+
+    def stop(self):
+        self._timer.stop()
+        self._trail_points.clear()
+        self.hide()
+
+
 class MainWindow(QMainWindow):
     """Main application window."""
 
@@ -58,6 +118,7 @@ class MainWindow(QMainWindow):
 
         self.current_user = user
         self.current_file: Optional[Path] = None
+        self._cursor_trail: Optional[CursorTrailOverlay] = None
 
         self._setup_ui()
         self._setup_menu_bar()
@@ -105,6 +166,8 @@ class MainWindow(QMainWindow):
 
         # Connect settings changes to apply accessibility preferences
         self.settings_tab.settings_changed.connect(self._on_settings_changed)
+        # Connect live preview (same handler, triggered on toggle/change)
+        self.settings_tab.preview_requested.connect(self._on_settings_changed)
 
         # Add tabs (3 tabs: Dashboard, PDF Viewer, Settings)
         self.tab_widget.addTab(self.dashboard_tab, "Dashboard")
@@ -979,6 +1042,18 @@ class MainWindow(QMainWindow):
         from PyQt6.QtCore import QByteArray
         from PyQt6.QtSvg import QSvgRenderer
 
+        # Stop cursor trail if switching away from it
+        if self._cursor_trail and style != "cursor-trail":
+            self._cursor_trail.stop()
+
+        if style == "cursor-trail":
+            self.unsetCursor()
+            if not self._cursor_trail:
+                self._cursor_trail = CursorTrailOverlay(self)
+            self._cursor_trail.setGeometry(self.rect())
+            self._cursor_trail.start()
+            return
+
         if style == "default":
             self.unsetCursor()
             return
@@ -1119,6 +1194,12 @@ class MainWindow(QMainWindow):
         msg.exec()
 
     # ==================== Event Handlers ====================
+
+    def resizeEvent(self, event) -> None:
+        """Keep cursor trail overlay sized to window."""
+        super().resizeEvent(event)
+        if self._cursor_trail and self._cursor_trail.isVisible():
+            self._cursor_trail.setGeometry(self.rect())
 
     def closeEvent(self, event) -> None:
         """Handle window close event."""
