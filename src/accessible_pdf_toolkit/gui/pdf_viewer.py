@@ -20,11 +20,13 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal, QThread, QTimer
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent
 
-from ..utils.constants import COLORS, WCAGLevel
+from ..utils.constants import COLORS, WCAGLevel, TagType
 from ..utils.logger import get_logger
 from ..core.pdf_handler import PDFHandler, PDFDocument
-from ..core.wcag_validator import WCAGValidator, ValidationResult
+from ..core.wcag_validator import WCAGValidator, ValidationResult, IssueSeverity
 from ..core.ai_detection import AIDetectionService, DocumentAnalysis, Detection
+from ..core.ai_processor import get_ai_processor, AIBackend
+from ..core.document_profile import DocumentProfileManager
 from .widgets.navigation_panel import NavigationPanel
 from .widgets.enhanced_pdf_viewer import EnhancedPDFViewer
 from .widgets.ai_suggestions_panel import AISuggestionsPanel
@@ -243,6 +245,7 @@ class PDFViewerPanel(QWidget):
         self._suggestions.save_requested.connect(self._save_document)
         self._suggestions.preview_requested.connect(self._preview_changes)
         self._suggestions.review_mode_changed.connect(self._on_review_mode_changed)
+        self._suggestions.doc_property_changed.connect(self.apply_doc_property)
 
         # Search results -> Viewer
         self._navigation.search_result_selected.connect(self._on_search_result_selected)
@@ -446,8 +449,9 @@ class PDFViewerPanel(QWidget):
 
         # Get the applied value
         applied_value = detection.get("applied_value") or detection.get("suggested_value", "")
-        detection_type = detection.get("type", "")
+        detection_type = detection.get("detection_type", "") or detection.get("type", "")
         detection_id = detection.get("id", "")
+        metadata = detection.get("metadata", {})
 
         # Add to undo stack (save original state)
         self._undo_stack.append(("apply", detection.copy()))
@@ -456,16 +460,15 @@ class PDFViewerPanel(QWidget):
         if self._document and applied_value:
             try:
                 if detection_type == "image":
-                    # Apply alt text to image
-                    logger.info(f"Applied alt text: {applied_value}")
+                    page_num = detection.get("page_number", 1)
+                    img_index = metadata.get("image_index", 0)
+                    self._handler.set_image_alt_text(page_num, img_index, applied_value)
+                    logger.info(f"Applied alt text on page {page_num}, image {img_index}: {applied_value[:60]}")
                 elif detection_type == "heading":
-                    # Apply heading level change
                     logger.info(f"Applied heading: {applied_value}")
                 elif detection_type == "link":
-                    # Apply link text change
                     logger.info(f"Applied link text: {applied_value}")
                 elif detection_type == "table":
-                    # Apply table header
                     logger.info(f"Applied table header: {applied_value}")
 
                 # Update detection status
@@ -474,6 +477,9 @@ class PDFViewerPanel(QWidget):
                 # Update overlay color to green (success)
                 if detection_id:
                     self._viewer.update_overlay_status(detection_id, "applied")
+
+                # Save to disk so changes persist
+                self._save_and_persist()
 
             except Exception as e:
                 logger.error(f"Failed to apply suggestion: {e}")
@@ -497,10 +503,16 @@ class PDFViewerPanel(QWidget):
         for detection in selected:
             self._on_suggestion_applied(detection)
 
+        # Re-validate and persist after batch apply
+        result = self.run_validation()
+        self._save_and_persist(result)
+
+        score_msg = f"\nUpdated score: {result.score:.0f}%" if result else ""
         QMessageBox.information(
             self,
             "Applied",
-            f"Applied {len(selected)} suggestions.",
+            f"Applied {len(selected)} suggestions.{score_msg}\n"
+            "Changes saved automatically.",
         )
 
     def _apply_all(self) -> None:
@@ -514,10 +526,16 @@ class PDFViewerPanel(QWidget):
                 self._on_suggestion_applied(detection.to_dict())
                 count += 1
 
+        # Re-validate and persist after batch apply
+        result = self.run_validation()
+        self._save_and_persist(result)
+
+        score_msg = f"\nUpdated score: {result.score:.0f}%" if result else ""
         QMessageBox.information(
             self,
             "Applied",
-            f"Applied {count} suggestions.",
+            f"Applied {count} suggestions.{score_msg}\n"
+            "Changes saved automatically.",
         )
 
     def _undo_last(self) -> None:
@@ -594,6 +612,193 @@ class PDFViewerPanel(QWidget):
             logger.info("Auto-accept mode enabled")
         else:
             logger.info("Manual review mode enabled")
+
+    def _save_and_persist(self, result: Optional[ValidationResult] = None) -> None:
+        """Save the PDF to disk and persist the compliance score to the document profile."""
+        if not self._document:
+            return
+
+        # Save the PDF so changes persist on disk
+        try:
+            if self._handler.save():
+                self._last_save_stack_size = len(self._undo_stack)
+                self._auto_save_label.setText(f"Saved at {self._get_current_time()}")
+                logger.info(f"Auto-saved after fix: {self._document.path}")
+            else:
+                logger.warning("Auto-save after fix failed")
+        except Exception as e:
+            logger.error(f"Auto-save after fix error: {e}")
+
+        # Persist document profile so the score is remembered across sessions
+        if result and self._document.path:
+            try:
+                DocumentProfileManager.save_session(self._document.path, result)
+            except Exception as e:
+                logger.debug(f"Document profile save skipped: {e}")
+
+    def apply_doc_property(self, prop: str, value: str) -> None:
+        """Apply a document-level property change (title, language) and re-validate."""
+        if not self._document or not value.strip():
+            return
+
+        if prop == "title":
+            self._handler.set_title(value.strip())
+            logger.info(f"Set document title to: {value.strip()}")
+        elif prop == "language":
+            self._handler.set_language(value.strip())
+            logger.info(f"Set document language to: {value.strip()}")
+        else:
+            return
+
+        # Update the suggestions panel display
+        self._suggestions.set_document_properties(
+            title=self._document.title,
+            language=self._document.language,
+            author=self._document.author,
+            subject=self._document.metadata.get("subject"),
+        )
+
+        # Re-validate to update score
+        result = self.run_validation()
+
+        # Save to disk and persist profile
+        self._save_and_persist(result)
+
+        if result:
+            QMessageBox.information(
+                self,
+                "Property Updated",
+                f"Document {prop} set to '{value.strip()}'.\n\n"
+                f"Updated score: {result.score:.0f}%\n"
+                "Changes saved automatically.",
+            )
+
+    def auto_fix_wcag(self) -> Optional[ValidationResult]:
+        """Auto-fix common WCAG issues and re-validate."""
+        if not self._document:
+            return None
+
+        # Validate first to find fixable issues
+        validator = WCAGValidator()
+        result = validator.validate(self._document)
+        fixable_issues = [i for i in result.issues if i.auto_fixable]
+
+        if not fixable_issues:
+            return result
+
+        fixed = 0
+        details = []
+
+        criteria = set(i.criterion for i in fixable_issues)
+
+        # 2.4.2: Fix missing title
+        if "2.4.2" in criteria and (not self._document.title or self._document.title.strip() == ""):
+            humanized = self._document.path.stem.replace("_", " ").replace("-", " ").title()
+            self._handler.set_title(humanized)
+            fixed += 1
+            details.append(f"Set title to '{humanized}'")
+
+        # 3.1.1: Fix missing language
+        if "3.1.1" in criteria and not self._document.language:
+            self._handler.set_language("en")
+            fixed += 1
+            details.append("Set language to 'en'")
+
+        # 1.3.1 / 1.3.2: Fix missing tags/structure
+        if "1.3.1" in criteria or "1.3.2" in criteria:
+            if not self._document.is_tagged or not self._document.has_structure:
+                self._handler.ensure_tagged()
+                fixed += 1
+                details.append("Created document structure tree")
+
+        # 1.3.1: Fix missing heading tags
+        heading_issues = [
+            i for i in fixable_issues
+            if i.criterion == "1.3.1" and "heading" in i.message.lower()
+        ]
+        if heading_issues:
+            headings = self._handler.detect_headings()
+            if headings:
+                headings.sort(key=lambda e: e.attributes.get("size", 0), reverse=True)
+                sizes = sorted(set(e.attributes.get("size", 0) for e in headings), reverse=True)
+                size_to_level = {size: min(i + 1, 6) for i, size in enumerate(sizes)}
+                for element in headings:
+                    size = element.attributes.get("size", 0)
+                    level = size_to_level.get(size, 6)
+                    tag_type = TagType(f"H{level}")
+                    element.tag = tag_type
+                    # Persist heading tag to the PDF structure tree
+                    self._handler.add_tag(element.page_number, element.bbox, tag_type)
+                fixed += 1
+                details.append(f"Auto-tagged {len(headings)} headings")
+
+        # 1.1.1: Fix missing image alt text
+        image_issues = [i for i in fixable_issues if i.criterion == "1.1.1"]
+        if image_issues:
+            ai = None
+            try:
+                ai = get_ai_processor(AIBackend.OLLAMA)
+                if not ai.is_available:
+                    ai = None
+            except Exception:
+                pass
+
+            img_fixed = 0
+            for issue in image_issues:
+                page_num = issue.page or 1
+                alt_text = None
+                if ai:
+                    try:
+                        image_bytes = self._handler.get_image_bytes(page_num, img_fixed)
+                        if image_bytes:
+                            context = ""
+                            for page in self._document.pages:
+                                if page.page_number == page_num:
+                                    context = page.text[:200]
+                                    break
+                            response = ai.generate_alt_text(image_bytes, context=context)
+                            if response.success and response.content.strip():
+                                alt_text = response.content.strip()
+                    except Exception as e:
+                        logger.debug(f"AI alt text failed for page {page_num}: {e}")
+                if not alt_text:
+                    alt_text = f"Image on page {page_num} (needs descriptive alt text)"
+                self._handler.set_image_alt_text(page_num, img_fixed, alt_text)
+                img_fixed += 1
+
+            if img_fixed > 0:
+                fixed += 1
+                details.append(f"Added alt text to {img_fixed} images")
+
+        # Update suggestions panel with new properties
+        self._suggestions.set_document_properties(
+            title=self._document.title,
+            language=self._document.language,
+            author=self._document.author,
+            subject=self._document.metadata.get("subject"),
+        )
+
+        # Re-validate
+        new_result = validator.validate(self._document)
+        self._last_validation_result = new_result
+        self.validation_complete.emit(new_result)
+
+        # Save to disk and persist profile
+        if fixed > 0:
+            self._save_and_persist(new_result)
+
+            detail_text = "\n".join(f"  - {d}" for d in details)
+            QMessageBox.information(
+                self,
+                "Auto-Fix",
+                f"Applied {fixed} fixes:\n\n{detail_text}\n\n"
+                f"Updated score: {new_result.score:.0f}%\n"
+                "Changes saved automatically.",
+            )
+        else:
+            QMessageBox.information(self, "Auto-Fix", "No auto-fixable issues found.")
+
+        return new_result
 
     def run_validation(self, target_level: WCAGLevel = WCAGLevel.AA) -> Optional[ValidationResult]:
         """
