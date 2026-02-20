@@ -44,20 +44,40 @@ This app runs on **your computer only**. Your files never leave your machine. Th
 | **Batch Process** | Validate and fix multiple PDFs at once via Tools > Batch Process |
 | **Export HTML** | Turn PDFs into accessible web pages (via File menu) |
 | **Undo / Redo** | Undo any tag edit or auto-fix with Ctrl+Z / Ctrl+Shift+Z |
+| **Accessibility Settings** | Full suite of display accommodations with live preview |
 | **Stay Private** | Everything stays on your computer - nothing goes online! |
 
 ---
 
-## What's New (v1.2.0)
+## What's New (v1.3.0)
 
-### Validation Improvements
+### Accessibility Settings with Live Preview
+- **High Contrast Mode** - black background with white text for maximum readability
+- **Reduced Motion** - disables all animations including toggle switch transitions
+- **Large Text Mode** - scales all fonts by 125% across the entire application
+- **Enhanced Focus Indicators** - adds bright yellow 4px focus rings and thicker borders on all interactive controls
+- **Dyslexia-Friendly Font** - switches to OpenDyslexic (or Comic Sans MS / Arial fallback) with increased letter and word spacing
+- **Color Blindness Accommodation** - remaps all brand colors app-wide for Deuteranopia, Protanopia, Tritanopia, or Monochrome vision
+- **Custom Cursor Styles** - Large Black, Large White, Large Crosshair, High Visibility, and animated Cursor Trail
+- **Live Preview** - every accessibility setting previews instantly as you toggle it, no save required
+
+### Animated Toggle Switches
+- All checkbox controls replaced with custom animated toggle switches
+- Smooth sliding thumb animation with color interpolation
+- Full keyboard accessibility (Tab to focus, Space/Enter to toggle)
+- Respects Reduced Motion setting (snaps instead of animating)
+- Color-blind-aware (toggle color updates with color blindness mode)
+
+### What was new in v1.2.0
+
+#### Validation Improvements
 - **Real image alt text checking** - walks the PDF structure tree instead of always reporting missing
 - **Color contrast analysis** - checks every text element against WCAG luminance thresholds (AA and AAA)
 - **Heuristic table detection** - finds untagged tables by detecting grid-like text patterns
 - **Untagged link detection** - finds hyperlinks that exist as annotations but lack Link structure tags
 - **Smarter reading order** - detects multi-column layouts and warns when reading order may be wrong
 
-### New Features
+#### Features
 - **Batch processing** - validate and auto-fix multiple PDFs at once (Tools > Batch Process)
 - **AI-powered alt text** - auto-fix uses your local AI to generate real image descriptions
 - **Undo / Redo** - revert any tag edit or auto-fix action (Ctrl+Z / Ctrl+Shift+Z)
@@ -65,7 +85,7 @@ This app runs on **your computer only**. Your files never leave your machine. Th
 - **Toolbar wiring** - Validate and AI Suggest toolbar buttons now work end-to-end
 - **Inline results panel** - validation issues appear as a clickable list with "Fix" and "Page N" buttons
 
-### Bug Fixes & Polish
+#### Bug Fixes & Polish
 - **Async validation** - UI no longer freezes during validation or AI calls
 - **Clean exit** - close confirmation only appears when there are unsaved changes
 - **Animation stability** - circular progress animation no longer gets garbage collected
@@ -198,10 +218,10 @@ The app has 3 tabs on the left side:
   - 🔴 **Red** = Problems to fix
 
 #### 3. Settings
-- Pick your AI helper (Ollama, LM Studio, etc.)
-- Change how the app looks
-- Configure accessibility checking options
-- Set batch processing preferences
+- **AI Backend** - pick your AI helper (Ollama, LM Studio, GPT4All, and more)
+- **Processing** - batch limits, OCR language, file preservation
+- **Display & Accessibility** - high contrast, reduced motion, large text, enhanced focus, dyslexia font, color blindness modes, custom cursors - all with instant live preview
+- **Validation** - choose WCAG level (A/AA/AAA) and toggle individual checks
 
 ---
 
@@ -224,6 +244,24 @@ Press these keys to work faster:
 
 ---
 
+## Accessibility Settings
+
+The app itself is built to be accessible. Go to **Settings** (Ctrl+3) and look under **Display & Accessibility** to configure:
+
+| Setting | What It Does |
+|---------|--------------|
+| **High Contrast** | Switches to a black-and-white theme for maximum readability |
+| **Reduced Motion** | Turns off all animations (toggle slides, progress spinners) |
+| **Large Text** | Increases all text by 25% across the entire app |
+| **Enhanced Focus** | Adds bright yellow borders around the currently focused control |
+| **Dyslexia Font** | Switches to OpenDyslexic (or Comic Sans MS) with extra letter spacing |
+| **Color Blindness** | Remaps purple/blue accents to blue, pink, or grayscale depending on mode |
+| **Custom Cursor** | Choose from Large Black, Large White, Crosshair, High Visibility, or Cursor Trail |
+
+All settings preview **instantly** as you toggle them - no need to save first.
+
+---
+
 ## Setting Up AI (Optional but Helpful!)
 
 The app can use AI to suggest fixes. The AI runs on your computer, so your files stay private.
@@ -242,8 +280,8 @@ The app can use AI to suggest fixes. The AI runs on your computer, so your files
 ### Tell the App to Use Ollama
 
 1. Open the app
-2. Go to **Settings** (Ctrl+5)
-3. Click **AI Backend** tab
+2. Go to **Settings** (Ctrl+3)
+3. Click the **AI Backend** tab
 4. Make sure **Ollama** is selected
 5. Click **Test Connection** - you should see a green checkmark!
 
